@@ -1,7 +1,7 @@
 (* Graphic Library *)
 #load "graphics.cma";;
 
-module Convolution :
+module KDTrees :
   sig
 		val getFormat : int -> int -> string
 		val drawPoints : int array array -> unit
@@ -32,7 +32,7 @@ module Convolution :
 			let (max_x,max_y) = (points.(n-1).(0),points.(n-1).(1)) in
 			Graphics.open_graph (getFormat max_x max_y);
 			(* Fill the window *)
-			for i = 0 to n do
+			for i = 0 to (n-1) do
 				Graphics.plot points.(i).(0) points.(i).(1);
 			done;;
 
@@ -163,3 +163,16 @@ module Convolution :
 		(* Remove an element from a tree *)
 		let removeTree x t dim = lazyRemoveTree x t dim;;
 	end
+
+		(* Get a random 2D points set *)
+		let uniformPoints (h,w) per_line per_row =
+			let ret = Array.make (((per_line+1)*(per_row+1))+1) [|0;0|] in
+			let delta_x = w/per_line in
+			let delta_y = h/per_row in
+			let cur = ref 0 in
+			for i = 0 to per_line do
+				for j = 0 to per_row do
+					ret.(!cur) <- [|i*delta_x;j*delta_y|];
+					cur := !cur + 1;
+				done;
+			done;ret;;
