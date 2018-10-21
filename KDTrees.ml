@@ -12,7 +12,6 @@ module KDTrees :
 		val drawTree : int * int -> int tree -> unit
 		val drawBorders : int tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> 'a tree
-		val lazyRemoveTree : 'a array -> 'a tree -> int -> 'a tree
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
   end =
 
@@ -141,27 +140,54 @@ module KDTrees :
 							Node(point,left,(addTree_aux right ((depth+1) mod dim)));); in
 			addTree_aux t 0;;
 
-		(* Lazy removal in kd-tree *)
-		let lazyRemoveTree x t dim =
-			(* Get a list of all the nodes in a tree *)
-			let rec list_of_tree t = match t with
-				| EmptyTree -> []
-				| Node(x,left,right) -> x::((list_of_tree left)@(list_of_tree right)) in
-			(* Search the problematic node and regenerate its subtree *)
-			let rec lazyRemoveTree_aux tr depth = match t with
-				| EmptyTree -> t;
-				| Node(point,left,right) ->
-					if (point = x) then
-						constructKDT (Array.of_list ((list_of_tree right)@(list_of_tree left))) dim
+		(* Better removal in kd-tree *)
+		let removeTree target t dim =
+			(* Find the max/min for the targetted depth *)
+			let rec extremum_t_min cut_t cur_depth depth = match cut_t with
+				| EmptyTree -> failwith "extremum_t_min: Error"
+				| Node(x,left,right) ->
+					let new_depth = ((cur_depth+1) mod dim) in
+					if (cur_depth = depth) then
+						if (left = EmptyTree) then x
+						else extremum_t_min left new_depth depth
 					else
-						(if x.(depth) < point.(depth) then
-							Node(point,(lazyRemoveTree_aux left ((depth+1) mod dim)),right)
+						min (min (extremum_t_min left new_depth depth)
+								(extremum_t_min right new_depth depth)) in
+			let rec extremum_t_max cut_t cur_depth depth = match cut_t with
+				| EmptyTree -> failwith "extremum_t_max: Error"
+				| Node(x,left,right) ->
+					let new_depth = ((cur_depth+1) mod dim) in
+					if (cur_depth = depth) then
+						if (right = EmptyTree) then x
+						else extremum_t_max right new_depth depth
+					else
+						max (extremum_t_max left new_depth depth)
+								(extremum_t_max right new_depth depth) in
+			(* Find the optimal replcament *)
+			let rec find_replacement sub_t depth = match sub_t with
+				| EmptyTree -> failwith "find_replacement: Error EmptyTree";
+				| Node(x,EmptyTree,right) -> extremum_t_min right depth depth
+				| Node(x,left,_) -> extremum_t_max left depth depth in
+			(* Find the node to replace *)
+			let rec search_and_replace cur_t target_cur depth = match cur_t with
+				| EmptyTree -> EmptyTree
+				| Node(x,EmptyTree,EmptyTree) ->
+					if (x = target_cur) then EmptyTree
+					else cur_t (* It's a leaf *)
+				| Node(x,left,right) ->
+					let new_depth = ((depth+1) mod dim) in
+					if (target_cur = x) then
+						let rep = find_replacement t depth in
+						(* Recursively remove the replacement *)
+						if (rep.(depth) < x.(depth)) then
+							Node(rep,(search_and_replace left rep new_depth),right)
 						else
-							Node(point,left,(lazyRemoveTree_aux right ((depth+1) mod dim)))) in
-			lazyRemoveTree_aux t 0;;
-
-		(* Remove an element from a tree *)
-		let removeTree x t dim = lazyRemoveTree x t dim;;
+							Node(rep,left,(search_and_replace right rep new_depth));
+					else
+							Node(x,(search_and_replace left target_cur new_depth),
+										 (search_and_replace right target_cur new_depth)) in
+			
+			search_and_replace t target 0;
 	end
 
 		(* Get a random 2D points set *)
