@@ -16,6 +16,17 @@ module KDTrees :
 		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
 		val uniformPoints : int * int -> int -> int -> int array array
+		val distance_int : int array -> int array -> int -> int
+		val distance_max_float : float
+		val distance_float : float array -> float array -> int -> float
+		type 'a distance_tools = {
+			op_add : 'a -> 'a -> 'a;
+			op_sub : 'a -> 'a -> 'a;
+			op_mul : 'a -> 'a -> 'a;
+			distance_f : 'a array -> 'a array -> int -> 'a;
+			distance_inf : 'a;
+		}
+		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> 'a * 'a array
   end =
 
   struct
@@ -225,5 +236,64 @@ module KDTrees :
 					cur := !cur + 1;
 				done;
 			done;ret;;
-		
-		end
+
+		(* Squared distances *)
+		let distance_max_int = max_int;;
+		let distance_int a b length =
+			let ret = ref 0 in
+			for i = 0 to (length-1) do
+				ret := !ret + ((a.(i) - b.(i))*(a.(i) - b.(i)))
+			done;!ret;;
+		let distance_max_float = infinity;;
+		let distance_float a b length =
+			let ret = ref 0. in
+			for i = 0 to (length-1) do
+				ret := !ret +. ((a.(i) -. b.(i))*.(a.(i) -. b.(i)))
+			done;!ret;;
+
+		(* Algebra toolpack *)
+		type 'a distance_tools = {
+				op_add : ('a -> 'a -> 'a);
+				op_sub : ('a -> 'a -> 'a);
+				op_mul : ('a -> 'a -> 'a);
+				distance_f : ('a array -> 'a array -> int -> 'a);
+				distance_inf : 'a };;
+		let int_tools = {
+				op_add = ( + );
+				op_sub = ( - );
+				op_mul = ( * );
+				distance_f = distance_int;
+				distance_inf = distance_max_int };;
+		let float_tools = {
+				op_add = ( +. );
+				op_sub = ( -. );
+				op_mul = ( *. );
+				distance_f = distance_float;
+				distance_inf = distance_max_float };;
+
+		(* Nearest Neighbor Search *)
+		let nns t target toolpack dim =
+			let w = ref toolpack.distance_inf in
+			let p = ref target in
+			let rec nns_aux cur_t depth = match cur_t with
+				| EmptyTree -> ()
+				| Node(x,left,right) ->
+					let new_depth = ((depth+1) mod dim) in
+					(* Check is the point is better than the best *)
+					let new_w = toolpack.distance_f target x dim in
+					if (new_w < !w) && (x <> target) then
+						(w := new_w;
+						p := x);
+					(* Visit subtrees *)
+					let sq_x = toolpack.op_mul x.(depth) x.(depth) in
+					let sq_target = toolpack.op_mul target.(depth) target.(depth) in
+					if target.(depth) < x.(depth) then
+						(if ((toolpack.op_sub sq_target !w) <= sq_x) then nns_aux left new_depth;
+						if ((toolpack.op_add sq_target !w) > sq_x) then nns_aux right new_depth)
+					else
+						(if ((toolpack.op_add sq_target !w) > sq_x) then nns_aux right new_depth;
+						if ((toolpack.op_sub sq_target !w) <= sq_x) then nns_aux left new_depth) in
+			nns_aux t 0;
+			(!w,!p);;
+
+	end
