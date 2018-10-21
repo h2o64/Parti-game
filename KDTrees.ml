@@ -12,7 +12,10 @@ module KDTrees :
 		val drawTree : int * int -> int tree -> unit
 		val drawBorders : int tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> 'a tree
+		val minimum_t : 'a tree -> int -> int -> int -> 'a array
+		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
+		val uniformPoints : int * int -> int -> int -> int array array
   end =
 
   struct
@@ -140,55 +143,75 @@ module KDTrees :
 							Node(point,left,(addTree_aux right ((depth+1) mod dim)));); in
 			addTree_aux t 0;;
 
+		(* Find the max/min for the targeted depth *)
+		let minimum_t t init_depth depth dim =
+			let rec minimum_t_aux cur_t cur_depth = match cur_t with
+				| EmptyTree -> failwith "minimum_t_aux: Error empty tree"
+				| Node(x,left,right) ->
+					let new_depth = ((cur_depth+1) mod dim) in
+					(* Tree splits on the dimension we’re searching
+						 => only visit left subtree *)
+					if (cur_depth = depth) then
+						if (left = EmptyTree) then (x.(depth),x)
+						else minimum_t_aux left new_depth
+					else
+						(* Tree splits on a different dimension
+							 => have to search both subtrees
+							 Avoid empty trees *)
+						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x)
+						else if (left = EmptyTree) then min (minimum_t_aux right new_depth) (x.(depth),x)
+						else if (right = EmptyTree) then min (minimum_t_aux left new_depth) (x.(depth),x)
+						else min (min (minimum_t_aux right new_depth) (minimum_t_aux left new_depth))
+										 (x.(depth),x) in
+			let (_,ret) = minimum_t_aux t init_depth in
+			ret;;
+
+		let maximum_t t init_depth depth dim =
+			let rec maximum_t_aux cur_t cur_depth = match cur_t with
+				| EmptyTree -> failwith "maximum_t_aux: Error empty tree"
+				| Node(x,left,right) ->
+					let new_depth = ((cur_depth+1) mod dim) in
+					(* Tree splits on the dimension we’re searching
+						 => only visit right subtree *)
+					if (cur_depth = depth) then
+						if (right = EmptyTree) then (x.(depth),x)
+						else maximum_t_aux right new_depth
+					else
+						(* T splits on a different dimension
+							 => have to search both subtrees
+							 Avoid empty trees *)
+						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x)
+						else if (left = EmptyTree) then max (maximum_t_aux right new_depth) (x.(depth),x)
+						else if (right = EmptyTree) then max (maximum_t_aux left new_depth) (x.(depth),x)
+						else max (max (maximum_t_aux right new_depth) (maximum_t_aux left new_depth))
+										 (x.(depth),x) in
+			let (_,ret) = maximum_t_aux t init_depth in
+			ret;;
+
 		(* Better removal in kd-tree *)
 		let removeTree target t dim =
-			(* Find the max/min for the targetted depth *)
-			let rec extremum_t_min cut_t cur_depth depth = match cut_t with
-				| EmptyTree -> failwith "extremum_t_min: Error"
-				| Node(x,left,right) ->
-					let new_depth = ((cur_depth+1) mod dim) in
-					if (cur_depth = depth) then
-						if (left = EmptyTree) then x
-						else extremum_t_min left new_depth depth
-					else
-						min (min (extremum_t_min left new_depth depth)
-								(extremum_t_min right new_depth depth)) in
-			let rec extremum_t_max cut_t cur_depth depth = match cut_t with
-				| EmptyTree -> failwith "extremum_t_max: Error"
-				| Node(x,left,right) ->
-					let new_depth = ((cur_depth+1) mod dim) in
-					if (cur_depth = depth) then
-						if (right = EmptyTree) then x
-						else extremum_t_max right new_depth depth
-					else
-						max (extremum_t_max left new_depth depth)
-								(extremum_t_max right new_depth depth) in
-			(* Find the optimal replcament *)
-			let rec find_replacement sub_t depth = match sub_t with
-				| EmptyTree -> failwith "find_replacement: Error EmptyTree";
-				| Node(x,EmptyTree,right) -> extremum_t_min right depth depth
-				| Node(x,left,_) -> extremum_t_max left depth depth in
-			(* Find the node to replace *)
-			let rec search_and_replace cur_t target_cur depth = match cur_t with
-				| EmptyTree -> EmptyTree
-				| Node(x,EmptyTree,EmptyTree) ->
-					if (x = target_cur) then EmptyTree
-					else cur_t (* It's a leaf *)
+			let rec removeTree_aux cur_target cur_t depth = match cur_t with
+				| EmptyTree -> failwith "removeTree_aux: Point can't be found"
 				| Node(x,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
-					if (target_cur = x) then
-						let rep = find_replacement t depth in
-						(* Recursively remove the replacement *)
-						if (rep.(depth) < x.(depth)) then
-							Node(rep,(search_and_replace left rep new_depth),right)
+					(* Point is found *)
+					if (cur_target = x) then
+						(* Use the minimum of the right depth from right tree *)
+						(if (right <> EmptyTree) then
+							(*  Swap subtrees and use min(cd) from new right *)
+							(let rep = (minimum_t right new_depth depth dim) in
+							Node(rep,left,(removeTree_aux rep right new_depth)))
+						else if (left <> EmptyTree) then
+							(let rep = (maximum_t left new_depth depth dim) in
+							Node(rep,(removeTree_aux rep left new_depth),right))
 						else
-							Node(rep,left,(search_and_replace right rep new_depth));
+							(* Just a leaf *)
+							(EmptyTree);)
+					else if (cur_target.(depth) < x.(depth)) then
+							(Node(x,(removeTree_aux cur_target left new_depth),right))
 					else
-							Node(x,(search_and_replace left target_cur new_depth),
-										 (search_and_replace right target_cur new_depth)) in
-			
-			search_and_replace t target 0;
-	end
+							(Node(x,left,(removeTree_aux cur_target right new_depth))); in
+			removeTree_aux target t 0;;
 
 		(* Get a random 2D points set *)
 		let uniformPoints (h,w) per_line per_row =
@@ -202,3 +225,5 @@ module KDTrees :
 					cur := !cur + 1;
 				done;
 			done;ret;;
+		
+		end
