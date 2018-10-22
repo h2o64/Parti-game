@@ -6,9 +6,12 @@ module KDTrees :
 		val getFormat : int -> int -> string
 		val drawPoints : int array array -> unit
 		val randomPoints : int * int -> int -> int array array
-		val per_co_sort : 'a array array -> int -> int -> unit
 		type 'a tree = EmptyTree | Node of 'a array * 'a tree * 'a tree
-		val constructKDT : 'a array array -> int -> 'a tree
+		val swap : 'a array -> int -> int -> unit
+		val partition_hoare : 'a array array -> int -> int -> int -> int
+		val partition_lomuto : 'a array array -> int -> int -> int -> int
+		val quicksort : 'a array array -> int -> int -> int -> unit
+		val constructKDT : 'a array array -> 'a tree
 		val drawTree : int * int -> int tree -> unit
 		val drawBorders : int tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> 'a tree
@@ -16,6 +19,7 @@ module KDTrees :
 		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
 		val uniformPoints : int * int -> int -> int -> int array array
+		val distance_max_int : int
 		val distance_int : int array -> int array -> int -> int
 		val distance_max_float : float
 		val distance_float : float array -> float array -> int -> float
@@ -26,7 +30,11 @@ module KDTrees :
 			distance_f : 'a array -> 'a array -> int -> 'a;
 			distance_inf : 'a;
 		}
+		val int_tools : int distance_tools
+		val float_tools : float distance_tools
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> 'a * 'a array
+		val compare_path : 'a tree -> 'a array -> int -> int -> unit
+		val checkTree : 'a tree -> int -> int -> int
   end =
 
   struct
@@ -56,49 +64,72 @@ module KDTrees :
 				ret.(i) <- [|(Random.int w);(Random.int h)|];
 			done;ret;;
 
-		(* Per-coordonate sort *)
-		let per_co_sort arr depth size =
-			(* Edit the array to keep index *)
-			let arr_new = Array.make size (arr.(0).(depth),infinity,0) in
-			for i = 0 to (size-1) do
-				arr_new.(i) <- (arr.(i).(depth),infinity,i);
-			done;
-			(* Sort the coordonates *)
-			Array.fast_sort compare arr_new;
-			(* Change the original array *)
-			let arr_c = Array.copy arr in
-			for i = 0 to (size-1) do
-				let (_,_,j) = arr_new.(i) in
-				arr.(i)<-arr_c.(j);
-			done;;
-
-		(* Constuct a tree - TODO: Try avoiding the continuous call of per_co_sort *)
+		(* Constuct a tree *)
 		let example = [| [|2;3|]; [|5;4|]; [|9;6|]; [|4;7|]; [|8;1|]; [|7;2|] |];;
 		type 'a tree =
 			| EmptyTree
 			| Node of ('a array) * ('a tree) * ('a tree);;
-		let constructKDT points dim =
-			(* Do a in-place construction *)
-			let rec constructKDT_aux cur_array depth =
-				let n = Array.length cur_array in
-				let next_dim = (depth+1) mod (dim-1) in
-				per_co_sort cur_array depth n;
-				match n with
-					| 0 -> EmptyTree
-					| 1 -> Node(cur_array.(0),EmptyTree,EmptyTree)
-					| 2 -> Node(cur_array.(1),
-									Node(cur_array.(0),EmptyTree,EmptyTree),
-									EmptyTree)
-					| 3 -> Node(cur_array.(2),
-									Node(cur_array.(0),EmptyTree,EmptyTree),
-									Node(cur_array.(1),EmptyTree,EmptyTree))
-					| _ ->
-							let median = (Array.length cur_array)/2 in
-							Node(cur_array.(median),
-								(constructKDT_aux (Array.sub cur_array 0 median) next_dim),
-								(constructKDT_aux (Array.sub cur_array (median+1) (n-median-1)) next_dim)) in
-			constructKDT_aux points 0;;
-			
+		(* Swap in an array *)
+		let swap arr i j =
+			let tmp = arr.(i) in
+			arr.(i) <- arr.(j);
+			arr.(j) <- tmp;;
+		(* Quicksort *)
+ 		(* Hoare Partition Scheme *)
+		let partition_hoare arr left right depth =
+			let pivot = arr.(left).(depth) in
+			let i = ref (left - 1) in
+			let j = ref (right + 1) in
+			try
+				while true do
+					i := !i + 1;
+						while (arr.(!i).(depth) < pivot) do
+							j := !j - 1;
+							while (arr.(!j).(depth) > pivot) do
+								if (!i >= !j) then raise Exit;
+								swap arr !i !j
+							done;
+						done;
+				done;(-1);
+			with Exit -> !j;;
+ 		(* Lomuto Partition Scheme *)
+		let partition_lomuto arr left right depth =
+			let pivot = arr.(right).(depth) in
+			let i = ref left in
+			for j = left to (right-1) do
+				if arr.(j).(depth) < pivot then
+					(if !i <> j then swap arr !i j;
+					i := !i + 1;)
+			done;
+			swap arr !i right;
+			!i;;
+ 		(* Sorting algorithm *)
+		let rec quicksort arr left right depth =
+			if (left < right) then
+				(let p = partition_lomuto arr left right depth in
+				quicksort arr left (p-1) depth;
+				quicksort arr (p+1) right depth);;
+		(* Actual construction of the tree *)
+		let constructKDT points =
+			let dim = Array.length points.(0) in
+			let length = Array.length points in
+			let rec constructKDT_aux a b depth =
+				let new_depth = ((depth+1) mod dim) in
+				match abs (a-b) with
+					| 0 -> Node(points.(a),EmptyTree,EmptyTree)
+					| 1 ->
+						(if points.(a).(depth) <= points.(b).(depth) then
+							Node(points.(a),EmptyTree,Node(points.(b),EmptyTree,EmptyTree))
+						else
+							Node(points.(a),Node(points.(b),EmptyTree,EmptyTree),EmptyTree))
+					| _ -> (* Sort our portion of points *)
+						(let median = (a + b + 1) / 2 in
+						quicksort points a b depth;
+						Node(points.(median),
+								 constructKDT_aux a (median-1) new_depth,
+								 constructKDT_aux (median+1) b new_depth)) in
+			constructKDT_aux 0 (length-1) 0;;
+
 		(* Print 2D points in a 2D tree *)
 		let drawTree (h,w) t =
 			(* Make the window  *)
@@ -242,13 +273,13 @@ module KDTrees :
 		let distance_int a b length =
 			let ret = ref 0 in
 			for i = 0 to (length-1) do
-				ret := !ret + ((a.(i) - b.(i))*(a.(i) - b.(i)))
+				ret := !ret + (abs ((a.(i) - b.(i))))
 			done;!ret;;
 		let distance_max_float = infinity;;
 		let distance_float a b length =
 			let ret = ref 0. in
 			for i = 0 to (length-1) do
-				ret := !ret +. ((a.(i) -. b.(i))*.(a.(i) -. b.(i)))
+				ret := !ret +. (abs_float ((a.(i) -. b.(i))))
 			done;!ret;;
 
 		(* Algebra toolpack *)
@@ -273,27 +304,61 @@ module KDTrees :
 
 		(* Nearest Neighbor Search *)
 		let nns t target toolpack dim =
+			(* Algorithm data *)
 			let w = ref toolpack.distance_inf in
 			let p = ref target in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
-				| Node(x,left,right) ->
-					let new_depth = ((depth+1) mod dim) in
+				| Node(x,EmptyTree,EmptyTree) -> 
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
 					if (new_w < !w) && (x <> target) then
 						(w := new_w;
 						p := x);
+				| Node(x,left,right) ->
+					let new_depth = ((depth+1) mod dim) in
 					(* Visit subtrees *)
-					let sq_x = toolpack.op_mul x.(depth) x.(depth) in
-					let sq_target = toolpack.op_mul target.(depth) target.(depth) in
-					if target.(depth) < x.(depth) then
-						(if ((toolpack.op_sub sq_target !w) <= sq_x) then nns_aux left new_depth;
-						if ((toolpack.op_add sq_target !w) > sq_x) then nns_aux right new_depth)
+					if target.(depth) <= x.(depth) then
+						(nns_aux left new_depth;
+						if (toolpack.op_add target.(depth) !w) >= x.(depth) then nns_aux right new_depth)
 					else
-						(if ((toolpack.op_add sq_target !w) > sq_x) then nns_aux right new_depth;
-						if ((toolpack.op_sub sq_target !w) <= sq_x) then nns_aux left new_depth) in
+						(nns_aux right new_depth;
+						if (toolpack.op_sub target.(depth) !w) <= x.(depth) then nns_aux left new_depth) in
+
 			nns_aux t 0;
 			(!w,!p);;
+
+		(* Path to a node *)
+		let rec compare_path t a depth dim = match t with
+			| EmptyTree -> ()
+			| Node(x,left,right) ->
+				if x = a then print_string " ok\n"
+				else
+					if a.(depth) <= x.(depth) then
+						(print_string "0";
+						compare_path left a ((depth+1) mod dim) dim)
+					else
+						(print_string "1";
+						compare_path right a ((depth+1) mod dim) dim);;
+					
+		(* Check if it's a kd-tree *)
+		let rec checkTree t depth dim = match t with
+			| EmptyTree -> 0
+			| Node(x,EmptyTree,EmptyTree) -> 0
+			| Node(a,left,right) ->
+				let new_depth = ((depth+1) mod dim) in
+				match (left,right) with
+					| EmptyTree,EmptyTree -> 0 
+					| Node(x,_,_),EmptyTree ->
+						if (x.(depth) > a.(depth)) then 1 + (checkTree left new_depth dim)
+						else (checkTree left new_depth dim)
+					| EmptyTree,Node(y,_,_) ->
+						if (y.(depth) < a.(depth)) then 1 + (checkTree right new_depth dim)
+						else (checkTree right new_depth dim)
+					| (Node(x,_,_),Node(y,_,_)) ->
+						let tmp = ref 0 in
+						if (x.(depth) > a.(depth)) then tmp := !tmp + 1;
+						if (y.(depth) < a.(depth)) then tmp := !tmp + 1;
+						!tmp + (checkTree left new_depth dim) + (checkTree right new_depth dim);;
 
 	end
