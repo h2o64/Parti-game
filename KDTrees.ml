@@ -18,7 +18,7 @@ module KDTrees :
 		val minimum_t : 'a tree -> int -> int -> int -> 'a array
 		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
-		val uniformPoints : int * int -> int -> int -> int array array
+		val uniformPoints : int * int -> int -> int -> bool -> int array array
 		val distance_max_int : int
 		val distance_int : int array -> int array -> int -> int
 		val distance_max_float : float
@@ -35,6 +35,7 @@ module KDTrees :
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> 'a * 'a array
 		val compare_path : 'a tree -> 'a array -> int -> int -> unit
 		val checkTree : 'a tree -> int -> int -> int
+		val sanity_test : int -> int array * int array array
   end =
 
   struct
@@ -256,7 +257,7 @@ module KDTrees :
 			removeTree_aux target t 0;;
 
 		(* Get a random 2D points set *)
-		let uniformPoints (h,w) per_line per_row =
+		let uniformPoints (h,w) per_line per_row random =
 			let ret = Array.make (((per_line+1)*(per_row+1))+1) [|0;0|] in
 			let delta_x = w/per_line in
 			let delta_y = h/per_row in
@@ -266,7 +267,13 @@ module KDTrees :
 					ret.(!cur) <- [|i*delta_x;j*delta_y|];
 					cur := !cur + 1;
 				done;
-			done;ret;;
+			done;
+			(* Random-izer 3000 *)
+			if random then
+				(for i = 0 to (per_line*per_row)/3 do
+					swap ret (Random.int (per_line*per_line)) (Random.int (per_line*per_line));
+				done;ret)
+			else ret;;
 
 		(* Squared distances *)
 		let distance_max_int = max_int;;
@@ -309,14 +316,13 @@ module KDTrees :
 			let p = ref target in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
-				| Node(x,EmptyTree,EmptyTree) -> 
+				| Node(x,left,right) ->
+					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
 					if (new_w < !w) && (x <> target) then
 						(w := new_w;
 						p := x);
-				| Node(x,left,right) ->
-					let new_depth = ((depth+1) mod dim) in
 					(* Visit subtrees *)
 					if target.(depth) <= x.(depth) then
 						(nns_aux left new_depth;
@@ -361,4 +367,30 @@ module KDTrees :
 						if (y.(depth) < a.(depth)) then tmp := !tmp + 1;
 						!tmp + (checkTree left new_depth dim) + (checkTree right new_depth dim);;
 
+	(* Sanity test for NNS *)
+	let sanity_test n =
+		let array_test = (randomPoints (800,800) n) in
+		let tree_test = constructKDT array_test in
+		Graphics.set_color Graphics.red;
+		drawTree (800,800) tree_test;
+		(* Choose a point *)
+		let num = Random.int n in
+		Graphics.set_color Graphics.blue;
+		Graphics.draw_circle array_test.(num).(0) array_test.(num).(1) 10;
+		(* Find the closest *)
+		let (_,closest) = nns tree_test array_test.(num) int_tools 2 in
+		Graphics.set_color Graphics.green;
+		Graphics.draw_circle closest.(0) closest.(1) 10;
+		(* Return the interssting stuff *)
+		(array_test.(num),array_test);;
+
 	end
+
+
+
+
+
+
+
+
+
