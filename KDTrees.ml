@@ -19,20 +19,15 @@ module KDTrees :
 		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
 		val uniformPoints : int * int -> int -> int -> bool -> int array array
-		val distance_max_int : int
-		val distance_int : int array -> int array -> int -> int
-		val distance_max_float : float
+		val distance_int : int array -> int array -> int -> float
 		val distance_float : float array -> float array -> int -> float
 		type 'a distance_tools = {
-			op_add : 'a -> 'a -> 'a;
-			op_sub : 'a -> 'a -> 'a;
-			op_mul : 'a -> 'a -> 'a;
-			distance_f : 'a array -> 'a array -> int -> 'a;
-			distance_inf : 'a;
+			op_to_float : 'a -> float;
+			distance_f : 'a array -> 'a array -> int -> float;
 		}
 		val int_tools : int distance_tools
 		val float_tools : float distance_tools
-		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> 'a * 'a array
+		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * 'a array
 		val compare_path : 'a tree -> 'a array -> int -> int -> unit
 		val checkTree : 'a tree -> int -> int -> int
 		val sanity_test : int -> int array * int array array
@@ -276,43 +271,35 @@ module KDTrees :
 			else ret;;
 
 		(* Squared distances *)
-		let distance_max_int = max_int;;
 		let distance_int a b length =
 			let ret = ref 0 in
 			for i = 0 to (length-1) do
-				ret := !ret + (abs ((a.(i) - b.(i))))
-			done;!ret;;
-		let distance_max_float = infinity;;
+				ret := !ret + ((a.(i) - b.(i)) * (a.(i) - b.(i)))
+			done;(sqrt (float_of_int !ret));;
 		let distance_float a b length =
 			let ret = ref 0. in
 			for i = 0 to (length-1) do
-				ret := !ret +. (abs_float ((a.(i) -. b.(i))))
-			done;!ret;;
+				ret := !ret +. ((a.(i) -. b.(i)) *. (a.(i) -. b.(i)))
+			done;(sqrt !ret);;
 
 		(* Algebra toolpack *)
 		type 'a distance_tools = {
-				op_add : ('a -> 'a -> 'a);
-				op_sub : ('a -> 'a -> 'a);
-				op_mul : ('a -> 'a -> 'a);
-				distance_f : ('a array -> 'a array -> int -> 'a);
-				distance_inf : 'a };;
+				op_to_float : ('a -> float);
+				distance_f : ('a array -> 'a array -> int -> float);
+				};;
 		let int_tools = {
-				op_add = ( + );
-				op_sub = ( - );
-				op_mul = ( * );
+				op_to_float = float_of_int;
 				distance_f = distance_int;
-				distance_inf = distance_max_int };;
+				};;
 		let float_tools = {
-				op_add = ( +. );
-				op_sub = ( -. );
-				op_mul = ( *. );
+				op_to_float = (let f x = x in f);
 				distance_f = distance_float;
-				distance_inf = distance_max_float };;
+				};;
 
 		(* Nearest Neighbor Search *)
 		let nns t target toolpack dim =
 			(* Algorithm data *)
-			let w = ref toolpack.distance_inf in
+			let w = ref max_float in
 			let p = ref target in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
@@ -324,12 +311,14 @@ module KDTrees :
 						(w := new_w;
 						p := x);
 					(* Visit subtrees *)
+					let target_depth = toolpack.op_to_float target.(depth) in
+					let x_depth = toolpack.op_to_float x.(depth) in
 					if target.(depth) <= x.(depth) then
 						(nns_aux left new_depth;
-						if (toolpack.op_add target.(depth) !w) >= x.(depth) then nns_aux right new_depth)
+						if (target_depth +. !w) >= x_depth then nns_aux right new_depth)
 					else
 						(nns_aux right new_depth;
-						if (toolpack.op_sub target.(depth) !w) <= x.(depth) then nns_aux left new_depth) in
+						if (target_depth -. !w) <= x_depth then nns_aux left new_depth) in
 
 			nns_aux t 0;
 			(!w,!p);;
@@ -385,12 +374,3 @@ module KDTrees :
 		(array_test.(num),array_test);;
 
 	end
-
-
-
-
-
-
-
-
-
