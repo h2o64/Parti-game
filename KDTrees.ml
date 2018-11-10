@@ -28,6 +28,7 @@ module KDTrees :
 		val int_tools : int distance_tools
 		val float_tools : float distance_tools
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * 'a array
+		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * 'a array) array
 		val compare_path : 'a tree -> 'a array -> int -> int -> unit
 		val checkTree : 'a tree -> int -> int -> int
 		val sanity_test : int -> int array * int array array
@@ -47,7 +48,7 @@ module KDTrees :
 			Array.fast_sort compare points;
 			(* Make the window - Force (0,0) to be the origin *)
 			let (max_x,max_y) = (points.(n-1).(0),points.(n-1).(1)) in
-			Graphics.open_graph (getFormat max_x max_y);
+			(* Graphics.open_graph (getFormat max_x max_y); *)
 			(* Fill the window *)
 			for i = 0 to (n-1) do
 				Graphics.plot points.(i).(0) points.(i).(1);
@@ -322,6 +323,37 @@ module KDTrees :
 
 			nns_aux t 0;
 			(!w,!p);;
+
+		(* k-Nearest Neighbor Search - TODO: Use a stack *)
+		let knns t target k toolpack dim =
+			(* Algorithm data *)
+			let w = ref max_float in
+			let ret = ref [] in
+			let rec nns_aux cur_t depth = match cur_t with
+				| EmptyTree -> ()
+				| Node(x,left,right) ->
+					let new_depth = ((depth+1) mod dim) in
+					(* Check is the point is better than the best *)
+					let new_w = toolpack.distance_f target x dim in
+					(* Add it to the list *)
+					if (x <> target) then
+						(ret := (new_w,x)::!ret;
+						if (new_w < !w) then w := new_w);
+					(* Visit subtrees *)
+					let target_depth = toolpack.op_to_float target.(depth) in
+					let x_depth = toolpack.op_to_float x.(depth) in
+					if target.(depth) <= x.(depth) then
+						(nns_aux left new_depth;
+						if (target_depth +. !w) >= x_depth then nns_aux right new_depth)
+					else
+						(nns_aux right new_depth;
+						if (target_depth -. !w) <= x_depth then nns_aux left new_depth) in
+			nns_aux t 0;
+			(* Return the best k *)
+			let ret_a = (Array.of_list !ret) in
+			Array.fast_sort compare ret_a;
+			let goal_length = if (Array.length ret_a) > k then k else (Array.length ret_a) in
+			Array.sub ret_a 0 goal_length;;
 
 		(* Path to a node *)
 		let rec compare_path t a depth dim = match t with
