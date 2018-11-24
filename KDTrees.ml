@@ -3,35 +3,22 @@
 
 module KDTrees :
   sig
-		val getFormat : int -> int -> string
 		val drawPoints : int array array -> unit
 		val randomPoints : int * int -> int -> int array array
 		type 'a tree = EmptyTree | Node of 'a array * 'a tree * 'a tree
-		val swap : 'a array -> int -> int -> unit
-		val partition_hoare : 'a array array -> int -> int -> int -> int
-		val partition_lomuto : 'a array array -> int -> int -> int -> int
-		val quicksort : 'a array array -> int -> int -> int -> unit
 		val constructKDT : 'a array array -> 'a tree
 		val drawTree : int * int -> int tree -> unit
 		val drawBorders : int tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> 'a tree
-		val minimum_t : 'a tree -> int -> int -> int -> 'a array
-		val maximum_t : 'a tree -> int -> int -> int -> 'a array
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
 		val uniformPoints : int * int -> int -> int -> bool -> int array array
 		val distance_int : int array -> int array -> int -> float
 		val distance_float : float array -> float array -> int -> float
-		type 'a distance_tools = {
-			op_to_float : 'a -> float;
-			distance_f : 'a array -> 'a array -> int -> float;
-		}
+		type 'a distance_tools
 		val int_tools : int distance_tools
 		val float_tools : float distance_tools
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * 'a array
 		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * 'a array) array
-		val compare_path : 'a tree -> 'a array -> int -> int -> unit
-		val checkTree : 'a tree -> int -> int -> int
-		val sanity_test : int -> int array * int array array
   end =
 
   struct
@@ -48,7 +35,7 @@ module KDTrees :
 			Array.fast_sort compare points;
 			(* Make the window - Force (0,0) to be the origin *)
 			let (max_x,max_y) = (points.(n-1).(0),points.(n-1).(1)) in
-			(* Graphics.open_graph (getFormat max_x max_y); *)
+			Graphics.open_graph (getFormat max_x max_y);
 			(* Fill the window *)
 			for i = 0 to (n-1) do
 				Graphics.plot points.(i).(0) points.(i).(1);
