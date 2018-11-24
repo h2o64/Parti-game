@@ -7,41 +7,16 @@ exception Full_Queue;;
 
 module PriorityQueue :
   sig
-		type 'a t = {
-			maxsize : int;
-			mutable size : int;
-			data : 'a array;
-			prio : int array;
-			index : ('a, int) Hashtbl.t;
-		}
-		type stat = {
-			mutable nbpush : int;
-			mutable nbpop : int;
-			mutable bigsize : int;
-		}
-		val global_stat : stat
-		val reset_stats : unit -> unit
-		val get_stats : unit -> int * int * int
-		val create : int -> int t
-		val is_empty : 'a t -> bool
-		val is_in : 'a -> 'a t -> bool
-		val index_of : 'a -> 'a t -> int
-		val length : 'a t -> int
-		val exchange_array : 'a array -> int -> int -> unit
-		val exchange_hash : ('a, 'b) Hashtbl.t -> 'a -> 'a -> unit
-		val exchange : 'a t -> int -> int -> unit
-		val top : 'a t -> 'a * int
-		val father : int -> int
-		val left : int -> int
-		val right : int -> int
-		val bubble_down : 'a t -> int -> unit
-		val bubble_up : 'a t -> int -> unit
-		val move : 'a t -> int -> int -> unit
-		val pop : 'a t -> 'a * int
-		val push : 'a * int -> 'a t -> unit
-		val decrease_prio : 'a * int -> 'a t -> unit
-		val increase_prio : 'a * int -> 'a t -> unit
-		val modify_prio : 'a * int -> 'a t -> unit
+    type 'a t
+    val reset_stats : unit -> unit
+    val get_stats : unit -> int * int * int
+    val create : int -> int t
+    val is_empty : 'a t -> bool
+    val is_in : 'a -> 'a t -> bool
+    val top : 'a t -> 'a * int
+    val pop : 'a t -> 'a * int
+    val push : 'a * int -> 'a t -> unit
+    val decrease_prio : 'a * int -> 'a t -> unit
   end =
   struct
 		type 'a t = {
