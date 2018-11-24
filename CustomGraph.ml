@@ -17,6 +17,7 @@ module CustomGraph :
 		val get_pt : ('a, 'b, 'c) graph -> 'a point -> 'c
 		val set_pt : ('a, 'b, 'c) graph -> 'a point -> 'c -> unit
 		val find_cell : ('a, 'b, 'c) graph -> 'a point -> 'a KDTrees.distance_tools -> 'a point
+		val rebalance : ('a, 'b, 'c) graph -> unit
   end =
   struct
 		(* Structures *)
@@ -125,5 +126,8 @@ module CustomGraph :
 		let find_cell graph (x : 'a point) distance_tools =
 			let (_,nearest) = KDTrees.nns graph.browse x distance_tools graph.dim in
 			(nearest : 'a point);;
+
+		(* Rebalance the search graph *)
+		let rebalance graph = graph.browse <- (KDTrees.rebalance graph.browse);;
 
 	end

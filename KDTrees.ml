@@ -19,6 +19,7 @@ module KDTrees :
 		val float_tools : float distance_tools
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * 'a array
 		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * 'a array) array
+		val rebalance : 'a tree -> 'a tree
   end =
 
   struct
@@ -391,5 +392,14 @@ module KDTrees :
 		Graphics.draw_circle closest.(0) closest.(1) 10;
 		(* Return the interssting stuff *)
 		(array_test.(num),array_test);;
+
+	(* Rebuild a tree to rebalance it *)
+	(* TODO: Use R*-Trees to adress this *)
+	let rebalance tree =
+		(* Dump the whole tree points *)
+		let rec dump t = match t with
+			| EmptyTree -> []
+			| Node(a,left,right) -> a::(ExtList.List.append (dump right) (dump left)) in
+		constructKDT (Array.of_list (dump tree));;
 
 	end
