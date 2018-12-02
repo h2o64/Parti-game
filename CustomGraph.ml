@@ -1,42 +1,47 @@
 module CustomGraph :
   sig
-		type 'a point
-		type ('a, 'b) edge
-		type ('a, 'b, 'c) info
-		type ('a, 'b, 'c) graph
-		val create_graph : 'a point array -> (unit -> 'b) -> int -> ('a, 'c, 'b) graph
-		val adj : ('a, 'b, 'c) graph -> 'a point -> 'a point -> int -> bool
-		val nei : ('a, 'b, 'c) graph -> 'a point -> int -> ('a, 'b) edge list
-		val get_edg : ('a, 'b, 'c) graph -> 'a point -> 'a point -> int -> 'b
-		val set_edg : ('a, 'b, 'c) graph -> 'a point -> 'a point -> 'b -> int -> unit
-		val add_edg : ('a, 'b, 'c) graph -> 'a point -> 'a point -> 'b -> int -> unit
-		val add_bunch_edg : ('a, 'b, 'c) graph -> 'a point -> ('a, 'b) edge list -> int -> unit
-		val rmv_edg : ('a, 'b, 'c) graph -> 'a point -> ('a, 'b) edge -> int -> unit
-		val add_pt : ('a, 'b, 'c) graph -> 'a point -> (unit -> 'c) -> unit
-		val rmv_pt : ('a, 'b, 'c) graph -> 'a point -> unit
-		val get_pt : ('a, 'b, 'c) graph -> 'a point -> 'c
-		val set_pt : ('a, 'b, 'c) graph -> 'a point -> 'c -> unit
-		val find_cell : ('a, 'b, 'c) graph -> 'a point -> 'a KDTrees.distance_tools -> 'a point
-		val rebalance : ('a, 'b, 'c) graph -> unit
-		val bfs : (int, 'a, int array) graph -> int point -> int -> unit
-		val dijkstra : (int, int, int array) graph -> int point -> int -> unit
-		val compute_path : (int, 'a, int array) graph -> int point -> int point -> int point list
-		val shortest_path_bfs : (int, 'a, int array) graph -> int point -> int point -> int -> int point list * int
-		val shortest_path_dijkstra : (int, int, int array) graph -> int point -> int point -> int -> int point list * int
+	type node
+	type 'a point
+	type 'a edge
+	type ('a, 'b, 'c) info
+	type ('a, 'b, 'c) graph
+	val create_graph : 'a array array -> (unit -> 'b) -> int -> ('a, 'c, 'b) graph
+	val adj : ('a, 'b, 'c) graph -> node -> node -> int -> bool
+	val nei : ('a, 'b, 'c) graph -> node -> int -> 'b edge list
+	val get_edg : ('a, 'b, 'c) graph -> node -> node -> int -> 'b
+	val set_edg : ('a, 'b, 'c) graph -> node -> node -> 'b -> int -> unit
+	val add_edg : ('a, 'b, 'c) graph -> node -> node -> 'b -> int -> unit
+	val add_bunch_edg : ('a, 'b, 'c) graph -> node -> 'b edge list -> int -> unit
+	val rmv_edg : ('a, 'b, 'c) graph -> node -> node -> int -> unit
+	val add_pt : ('a, 'b, 'c) graph -> 'a point -> (unit -> 'c) -> unit
+	val rmv_nd : ('a, 'b, 'c) graph -> node -> unit
+	val rmv_point : ('a, 'b, 'c) graph -> 'a point -> node -> unit
+	val get_node : ('a, 'b, 'c) graph -> node -> 'c
+	val set_node : ('a, 'b, 'c) graph -> node -> 'c -> unit
+	val find_node : ('a, 'b, 'c) graph -> 'a point -> 'a KDTrees.distance_tools -> node
+	val rebalance : ('a, 'b, 'c) graph -> unit
+	val bfs : ('a, 'b, node array) graph -> node -> int -> unit
+	val dijkstra : ('a, int, node array) graph -> node -> int -> unit
+	val compute_path : ('a, 'b, node array) graph -> node -> node -> node list
+	val shortest_path_bfs : ('a, 'b, node array) graph -> node -> node -> int -> node list * node
+	val shortest_path_dijkstra : ('a, int, node array) graph -> node -> node -> int -> node list * node
   end =
   struct
 		(* Structures *)
+		type node = int;;
 		type 'a point = 'a array;;
-		type ('a,'b) edge = 'a point * 'b;;
+		type 'a edge = node * 'a;;
 		type ('a,'b,'c) info = {
-			mutable neigh : ('a,'b) edge list array;
+			point : 'a point;
+			mutable neigh : 'b edge list array;
 			mutable info : 'c;
 		};;	
 		type ('a,'b,'c) graph = {
 			dim : int;
 			multiplicity : int;
+			mutable count : int;
 			mutable browse : 'a KDTrees.tree;
-			mutable data : ('a point, ('a,'b,'c) info) Hashtbl.t;
+			mutable data : (node, ('a,'b,'c) info) Hashtbl.t;
 		};;
 
 
@@ -48,14 +53,19 @@ module CustomGraph :
 			let hashtbl = Hashtbl.create (length*ratio) in
 			let create_list x = [] in
 			let create_empty_nei () = Array.init multiplicity create_list in
+			(* Create the tree *)
+			let (tree,numeral) = (KDTrees.constructKDT points) in
 			for i = 0 to (length-1) do
-				Hashtbl.add hashtbl points.(i) {info = (init_function ());
-												neigh = (create_empty_nei ());}
+				Hashtbl.add hashtbl i {
+					point = numeral.(i);
+					info = (init_function ());
+					neigh = (create_empty_nei ());}
 			done;
 			{
 				dim = (Array.length points.(0));
+				count = length;
 				multiplicity = multiplicity;
-				browse = (KDTrees.constructKDT points);
+				browse = tree;
 				data = hashtbl;
 			};;
 
@@ -101,169 +111,90 @@ module CustomGraph :
 		let rmv_edg graph x y m =
 			let rec rmv_list l = match l with
 				| [] -> []
-				| h::t -> if h = y then t else h::(rmv_list t) in
+				| (h,v)::t -> if h = y then t else (h,v)::(rmv_list t) in
 			let cur_value = (Hashtbl.find graph.data x) in
 			cur_value.neigh.(m) <- rmv_list cur_value.neigh.(m);
 			Hashtbl.replace graph.data x cur_value;;
 
 		(* Add a point *)
-		let add_pt graph x init_function =
+		let add_pt graph point init_function =
 			(* Add to the KDTree *)
-			graph.browse <- KDTrees.addTree x graph.browse graph.dim;
-			let create_list x = [] in
+			graph.count <- graph.count + 1;
+			graph.browse <- KDTrees.addTree point graph.browse graph.count graph.dim;
+			let create_list k = [] in
 			let create_empty_nei () = Array.init graph.multiplicity create_list in
 			(* Add to the hashtbl *)
-			Hashtbl.add graph.data x {info = (init_function ());
-					neigh = (create_empty_nei ());};;
+			Hashtbl.add graph.data (graph.count) {
+				point = point;
+				info = (init_function ());
+				neigh = (create_empty_nei ());};;
+
+		(* Remove a node *)
+		let rmv_nd graph x =
+			(* Wipe it's neighbor edges *)
+			let rec rmv_nei l i = match l with
+				| [] -> ()
+				| (v,_)::t ->
+					rmv_edg graph x v i;
+					rmv_edg graph v x i;
+					rmv_nei t i in
+			for i = 0 to graph.multiplicity do
+				rmv_nei (nei graph x i) i;
+			done;
+			(* Remove from the hashtbl *)
+			let point = (Hashtbl.find graph.data x).point in
+			Hashtbl.remove graph.data x;
+			(* Add to the KDTree *)
+			graph.browse <- KDTrees.removeTree point graph.browse graph.dim;;
 
 		(* Remove a point *)
-		let rmv_pt graph x =
-			(* Add to the KDTree *)
-			graph.browse <- KDTrees.removeTree x graph.browse graph.dim;
+		let rmv_point graph (point : 'a point) nb =
+			(* Wipe it's neighbor edges *)
+			let rec rmv_nei l i = match l with
+				| [] -> ()
+				| (v,_)::t ->
+					rmv_edg graph nb v i;
+					rmv_edg graph v nb i;
+					rmv_nei t i in
+			for i = 0 to graph.multiplicity do
+				rmv_nei (nei graph nb i) i;
+			done;
 			(* Add to the hashtbl *)
-			Hashtbl.remove graph.data x;;
+			Hashtbl.remove graph.data nb;
+			(* Add to the KDTree *)
+			graph.browse <- KDTrees.removeTree point graph.browse graph.dim;;
 
 		(* Get point info *)
-		let get_pt graph x = (Hashtbl.find graph.data x).info;;
+		let get_node graph x = (Hashtbl.find graph.data x).info;;
 
 		(* Set point info *)
-		let set_pt graph x info =
+		let set_node graph x info =
 			let cur_value = (Hashtbl.find graph.data x) in
 			cur_value.info <- info;
 			Hashtbl.replace graph.data x cur_value;;
 
 		(* Find the current cell *)
-		let find_cell graph (x : 'a point) distance_tools =
-			let (_,nearest) = KDTrees.nns graph.browse x distance_tools graph.dim in
-			(nearest : 'a point);;
+		let find_node graph (x : 'a point) distance_tools =
+			let (_,(_,nb)) = KDTrees.nns graph.browse x distance_tools graph.dim in
+			(nb : node);;
 
 		(* Rebalance the search graph *)
 		let rebalance graph = graph.browse <- (KDTrees.rebalance graph.browse);;
 
-		(* Integer pairing *)
-		(* Cantor pairing *)
-		let cantor_pairing (point : int point) =
-			((point.(0) + point.(1)) * (point.(0) + point.(1) + 1) / 2) + point.(1);;
-		let cantor_reverse z =
-			let w = int_of_float (floor ((sqrt((float_of_int z) *. 8. +. 1.) -. 1.) /. 2.)) in
-			let t = (w*w + w) / 2 in
-			let y = z - t in
-			let x = w - y in
-			([|x;y|] : int point);;
-		(* Hopcroft/Ullman pairing *)
-		let hopcfroft_delta x = x * (x + 1) / 2;;
-		let hopcfroft_pairing (point : int point) =
-			(hopcfroft_delta (point.(0) + point.(1) - 2)) + point.(0);;
-		let hopcfroft_reverse h =
-			let c = int_of_float (floor (sqrt((float_of_int (h*2))) -. 0.5)) in
-			let i = h - (hopcfroft_delta c) in
-			let j = c - i + 2 in
-			([|i;j|] : int point);;
-		(* Pigeon - Bitwise paring with bits interleaving *)
-		let bitwise_pairing (point : int point) =
-			let x = ref point.(0) in
-			let y = ref point.(1) in
-			let p = ref 0 in
-			let i = ref 0 in
-			while ((!x <> 0) || (!y <> 0)) do
-				p := !p lor ((!x land 1) lsl !i);
-				x := !x lsr 1;
-				p := !p lor ((!y land 1) lsl (!i+1));
-				y := !y lsr 1;
-				i := !i + 2;
-			done;!p;;
-		let bitwise_reverse h =
-			let x = ref 0 in
-			let y = ref 0 in
-			let p = ref h in
-			let i = ref 0 in
-			while (!p <> 0) do
-				x := !x lor ((!p land 1) lsl !i);
-				p := !p lsr 1;
-				y := !y lor ((!p land 1) lsl !i);
-				p := !p lsr 1;
-				i := !i + 1;
-			done;
-			([|!x;!y|] : int point);;
-		(* Tail recursive int fast exponentiation *)
-		let pow base exponent =
-			let rec aux accumulator base = function
-				| 0 -> accumulator
-				| 1 -> base * accumulator
-				| e when ((e mod 2) = 0) -> aux accumulator (base * base) (e / 2)
-				| e -> aux (base * accumulator) (base * base) ((e - 1) / 2) in
-			aux 1 base exponent;;
-		(* Godel Numbering *)
-		let godel_paring (point : int point) =
-				(pow 2 point.(0)) * (pow 2 point.(1));;
-		let godel_reverse h =
-			(* variables *)
-			let x = ref 0 in
-			let z = ref 0 in
-			(* Galloping *)
-			let lo_y = ref 0 in
-			let hi_y = ref 0 in
-			while (!z mod (pow 3 !hi_y)) = 0 do
-				lo_y := !hi_y;
-				hi_y := !hi_y * 2;
-			done;
-			(* Search *)
-			while (!lo_y < !hi_y) do
-				let test_y = (!hi_y + !lo_y + 1) / 2 in
-				if (!z mod (pow 3 test_y)) = 1 then hi_y := test_y - 1
-				else lo_y := test_y;
-			done;
-			(* Result *)
-			z := !z / (pow 3 !lo_y);
-			x := int_of_float ((log ((float_of_int !z)+.0.01)) /. (log 2.)); (* Numerical stability issue *)
-			([|!x;!lo_y|] : int point);;
-		(* Pairing for any dimension *)
-		let rec global_pairing funct point size = match size with
-			| 0 -> failwith "global_pairing: Size = 0"
-			| 1 -> failwith "global_pairing: Size = 1"
-			| 2 -> funct point
-			| _ ->
-				(if (size mod 2) = 0 then
-					let s2 = (size/2) in
-					if s2 = 1 then failwith "HERE";
-					funct [|global_pairing funct (Array.sub point 0 s2) s2;
-						global_pairing funct (Array.sub point s2 s2) s2|]
-					else funct [|point.(0);
-						(global_pairing funct (Array.sub point 1 (size-1)) (size-1))|];);;
-		(* Reversing for any dimension *)
-		let rec global_reverse funct z size = match size with
-			| 0 -> failwith "global_reverse: Size = 0"
-			| 1 -> failwith "global_reverse: Size = 1"
-			| 2 -> funct z
-			| _ ->
-				if (size mod 2) = 0 then
-					let cur = funct z in
-					let s2 = (size/2) in
-					Array.concat [(global_reverse funct cur.(0) s2);
-						(global_reverse funct cur.(1) s2)]
-				else
-					let cur = funct z in
-					Array.concat [[|cur.(0)|];(global_reverse funct cur.(1) ((size-1)))];;
-
 		(* Breadth First Search Algorithm *)
 		let bfs g s m =
-			(* WARNING: The pairing functions of overflowing easily if the
-									dimension is higher than 5 *)
-			if (g.dim > 5) then failwith "dijkstra: Doesn't work with too high dimensions";
-			(* Get pairing of a point *)
-			let h x = global_pairing cantor_pairing x g.dim in
 			(* Structure of the header :
 					0 -> color
 					1 -> father
 					2 -> dist
 			*)
-			let get_col u = (get_pt g u).(0) in
-			let get_dist u = (get_pt g u).(2) in
+			let get_col u = (get_node g u).(0) in
+			let get_dist u = (get_node g u).(2) in
 			let set_var u i v =
-				let info = (get_pt g u) in
+				let info = (get_node g u) in
 				info.(i)<-v; in
 			let set_col u c = set_var u 0 c in
-			let set_father u v = set_var u 1 (h v) in
+			let set_father u v = set_var u 1 v in
 			let set_dist u v = set_var u 2 v in
 			(* Variables *)
 			let color_ref = Random.bits () (* Select a random color *)
@@ -294,29 +225,24 @@ module CustomGraph :
 
 		(* Dijkstra Algorithm *)
 		let dijkstra g r m =
-			(* WARNING: The pairing functions of overflowing easily if the
-									dimension is higher than 5 *)
-			if (g.dim > 5) then failwith "dijkstra: Doesn't work with too high dimensions";
-			(* Get pairing of a point *)
-			let h x = global_pairing cantor_pairing x g.dim in
 			(* Structure of the header :
 					0 -> color
 					1 -> father
 					2 -> dist
 			*)
-			let get_col u = (get_pt g u).(0) in
-			let get_dist u = (get_pt g u).(2) in
+			let get_col u = (get_node g u).(0) in
+			let get_dist u = (get_node g u).(2) in
 			let set_var u i v =
-				let info = (get_pt g u) in
+				let info = (get_node g u) in
 				info.(i)<-v; in
 			let set_col u c = set_var u 0 c in
-			let set_father u v = set_var u 1 (h v) in
+			let set_father u v = set_var u 1 v in
 			let set_dist u v = set_var u 2 v in
 			(* Variables *)
 			let color_ref = Random.bits () in (* Select a random color *)
 			if (get_col r) = color_ref then failwith "dijkstra: Wrong color";
 			let n = Hashtbl.length g.data in
-			let f = PriorityQueue.create n [||] in
+			let f = PriorityQueue.create n r in
 			(* Initialisation *)
 			set_dist r 0;
 			PriorityQueue.push (r, 0) f;
@@ -342,24 +268,22 @@ module CustomGraph :
 
 		(* Compute path between two points given a father array *)
 		let compute_path g u v =
-			(* Get pairing of a point *)
-			let h_r x = global_reverse cantor_reverse x g.dim in
 			(* Actual computation *)
 			let rec aux v pth =
 				if v = u then u::pth
-				else if (get_pt g v).(1) = (-1) then [] (* failwith "compute_path" *)
+				else if (get_node g v).(1) = (-1) then [] (* failwith "compute_path" *)
 				else
-					let w = (get_pt g v).(1) in aux (h_r w) (v :: pth) in
+					let w = (get_node g v).(1) in aux w (v :: pth) in
 			aux v [];;
 
 		(* Shortest path between u and v in g for m using bfs *)
 		let shortest_path_bfs g u v m =
 			bfs g u m;
-			(compute_path g u v, (get_pt g v).(2));;
+			(compute_path g u v, (get_node g v).(2));;
 
 		(* Shortest path between u and v in g for m using dijkstra *)
 		let shortest_path_dijkstra g u v m =
 			dijkstra g u m;
-			(compute_path g u v, (get_pt g v).(2));;
+			(compute_path g u v, (get_node g v).(2));;
 
 	end

@@ -5,11 +5,11 @@ module KDTrees :
   sig
 		val drawPoints : int array array -> unit
 		val randomPoints : int * int -> int -> int array array
-		type 'a tree = EmptyTree | Node of 'a array * 'a tree * 'a tree
-		val constructKDT : 'a array array -> 'a tree
+		type 'a tree = EmptyTree | Node of 'a array * int * 'a tree * 'a tree
+		val constructKDT : 'a array array -> ('a tree * 'a array array)
 		val drawTree : int * int -> int tree -> unit
 		val drawBorders : int tree -> unit
-		val addTree : 'a array -> 'a tree -> int -> 'a tree
+		val addTree : 'a array -> 'a tree -> int -> int -> 'a tree
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
 		val uniformPoints : int * int -> int -> int -> bool -> int array array
 		val distance_int : int array -> int array -> int -> float
@@ -17,8 +17,8 @@ module KDTrees :
 		type 'a distance_tools
 		val int_tools : int distance_tools
 		val float_tools : float distance_tools
-		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * 'a array
-		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * 'a array) array
+		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * ('a array * int)
+		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * ('a array * int)) array
 		val rebalance : 'a tree -> 'a tree
   end =
 
@@ -53,7 +53,7 @@ module KDTrees :
 		let example = [| [|2;3|]; [|5;4|]; [|9;6|]; [|4;7|]; [|8;1|]; [|7;2|] |];;
 		type 'a tree =
 			| EmptyTree
-			| Node of ('a array) * ('a tree) * ('a tree);;
+			| Node of ('a array) * int * ('a tree) * ('a tree);;
 		(* Swap in an array *)
 		let swap arr i j =
 			let tmp = arr.(i) in
@@ -98,22 +98,29 @@ module KDTrees :
 		let constructKDT points =
 			let dim = Array.length points.(0) in
 			let length = Array.length points in
+			(* Count each node *)
+			let cur_count = ref (-1) in
+			let ret_num = Array.make length [||] in
+			let get_nb point () =
+				cur_count := !cur_count + 1;
+				ret_num.(!cur_count) <- point;
+				!cur_count in 
 			let rec constructKDT_aux a b depth =
 				let new_depth = ((depth+1) mod dim) in
 				match abs (a-b) with
-					| 0 -> Node(points.(a),EmptyTree,EmptyTree)
+					| 0 -> Node(points.(a),(get_nb points.(a) ()),EmptyTree,EmptyTree)
 					| 1 ->
 						(if points.(a).(depth) <= points.(b).(depth) then
-							Node(points.(a),EmptyTree,Node(points.(b),EmptyTree,EmptyTree))
+							Node(points.(a),(get_nb points.(a) ()),EmptyTree,Node(points.(b),(get_nb points.(b) ()),EmptyTree,EmptyTree))
 						else
-							Node(points.(a),Node(points.(b),EmptyTree,EmptyTree),EmptyTree))
+							Node(points.(a),(get_nb points.(a) ()),Node(points.(b),(get_nb points.(b) ()),EmptyTree,EmptyTree),EmptyTree))
 					| _ -> (* Sort our portion of points *)
 						(let median = (a + b + 1) / 2 in
 						quicksort points a b depth;
-						Node(points.(median),
+						Node(points.(median),(get_nb points.(median) ()),
 								 constructKDT_aux a (median-1) new_depth,
 								 constructKDT_aux (median+1) b new_depth)) in
-			constructKDT_aux 0 (length-1) 0;;
+			((constructKDT_aux 0 (length-1) 0),ret_num);;
 
 		(* Print 2D points in a 2D tree *)
 		let drawTree (h,w) t =
@@ -122,7 +129,7 @@ module KDTrees :
 			let rec drawTree_aux t =
 				match t with
 					| EmptyTree -> ()
-					| Node(point,left,right) -> ((Graphics.plot point.(0) point.(1));
+					| Node(point,_,left,right) -> ((Graphics.plot point.(0) point.(1));
 															 drawTree_aux left;
 															 drawTree_aux right) in
 			drawTree_aux t;;
@@ -135,7 +142,7 @@ module KDTrees :
 			(* Count node parity for X/Y *)
 			let rec drawBorders_aux tr i median_point side = match tr with
 				| EmptyTree -> ()
-				| Node(point,left,right) ->
+				| Node(point,_,left,right) ->
 					if ((i mod 2) = 0) then
 						(Graphics.set_color Graphics.red;
 						if side = 0 then
@@ -157,87 +164,87 @@ module KDTrees :
 			drawBorders_aux t 0 [|h;w|] 0;;
 
 		(* Add an element to tree - Breaks balancing *)
-		let addTree x t dim =
+		let addTree x t count dim =
 			(* Need to keep the depth in mind *)
 			let rec addTree_aux tr depth =  match tr with
-				| EmptyTree -> Node(x,EmptyTree,EmptyTree)
-				| Node(point,left,right) ->
+				| EmptyTree -> Node(x,(count+1),EmptyTree,EmptyTree)
+				| Node(point,_,left,right) ->
 					if (point = x) then tr
 					else
 						(if (x.(depth) < point.(depth)) then
-							Node(point,(addTree_aux left ((depth+1) mod dim)),right)
+							Node(point,(count+1),(addTree_aux left ((depth+1) mod dim)),right)
 						else
-							Node(point,left,(addTree_aux right ((depth+1) mod dim)));); in
+							Node(point,(count+1),left,(addTree_aux right ((depth+1) mod dim)));); in
 			addTree_aux t 0;;
 
 		(* Find the max/min for the targeted depth *)
 		let minimum_t t init_depth depth dim =
 			let rec minimum_t_aux cur_t cur_depth = match cur_t with
 				| EmptyTree -> failwith "minimum_t_aux: Error empty tree"
-				| Node(x,left,right) ->
+				| Node(x,count,left,right) ->
 					let new_depth = ((cur_depth+1) mod dim) in
 					(* Tree splits on the dimension we’re searching
 						 => only visit left subtree *)
 					if (cur_depth = depth) then
-						if (left = EmptyTree) then (x.(depth),x)
+						if (left = EmptyTree) then (x.(depth),x,count)
 						else minimum_t_aux left new_depth
 					else
 						(* Tree splits on a different dimension
 							 => have to search both subtrees
 							 Avoid empty trees *)
-						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x)
-						else if (left = EmptyTree) then min (minimum_t_aux right new_depth) (x.(depth),x)
-						else if (right = EmptyTree) then min (minimum_t_aux left new_depth) (x.(depth),x)
+						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x,count)
+						else if (left = EmptyTree) then min (minimum_t_aux right new_depth) (x.(depth),x,count)
+						else if (right = EmptyTree) then min (minimum_t_aux left new_depth) (x.(depth),x,count)
 						else min (min (minimum_t_aux right new_depth) (minimum_t_aux left new_depth))
-										 (x.(depth),x) in
-			let (_,ret) = minimum_t_aux t init_depth in
-			ret;;
+										 (x.(depth),x,count) in
+			let (_,ret,count) = minimum_t_aux t init_depth in
+			(ret,count);;
 
 		let maximum_t t init_depth depth dim =
 			let rec maximum_t_aux cur_t cur_depth = match cur_t with
 				| EmptyTree -> failwith "maximum_t_aux: Error empty tree"
-				| Node(x,left,right) ->
+				| Node(x,count,left,right) ->
 					let new_depth = ((cur_depth+1) mod dim) in
 					(* Tree splits on the dimension we’re searching
 						 => only visit right subtree *)
 					if (cur_depth = depth) then
-						if (right = EmptyTree) then (x.(depth),x)
+						if (right = EmptyTree) then (x.(depth),x,count)
 						else maximum_t_aux right new_depth
 					else
 						(* T splits on a different dimension
 							 => have to search both subtrees
 							 Avoid empty trees *)
-						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x)
-						else if (left = EmptyTree) then max (maximum_t_aux right new_depth) (x.(depth),x)
-						else if (right = EmptyTree) then max (maximum_t_aux left new_depth) (x.(depth),x)
+						if (left = EmptyTree) && (right = EmptyTree) then (x.(depth),x,count)
+						else if (left = EmptyTree) then max (maximum_t_aux right new_depth) (x.(depth),x,count)
+						else if (right = EmptyTree) then max (maximum_t_aux left new_depth) (x.(depth),x,count)
 						else max (max (maximum_t_aux right new_depth) (maximum_t_aux left new_depth))
-										 (x.(depth),x) in
-			let (_,ret) = maximum_t_aux t init_depth in
-			ret;;
+										 (x.(depth),x,count) in
+			let (_,ret,count) = maximum_t_aux t init_depth in
+			(ret,count);;
 
 		(* Better removal in kd-tree *)
 		let removeTree target t dim =
 			let rec removeTree_aux cur_target cur_t depth = match cur_t with
 				| EmptyTree -> failwith "removeTree_aux: Point can't be found"
-				| Node(x,left,right) ->
+				| Node(x,count,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Point is found *)
 					if (cur_target = x) then
 						(* Use the minimum of the right depth from right tree *)
 						(if (right <> EmptyTree) then
 							(*  Swap subtrees and use min(cd) from new right *)
-							(let rep = (minimum_t right new_depth depth dim) in
-							Node(rep,left,(removeTree_aux rep right new_depth)))
+							(let (rep,c) = (minimum_t right new_depth depth dim) in
+							Node(rep,c,left,(removeTree_aux rep right new_depth)))
 						else if (left <> EmptyTree) then
-							(let rep = (maximum_t left new_depth depth dim) in
-							Node(rep,(removeTree_aux rep left new_depth),right))
+							(let (rep,c) = (maximum_t left new_depth depth dim) in
+							Node(rep,c,(removeTree_aux rep left new_depth),right))
 						else
 							(* Just a leaf *)
 							(EmptyTree);)
 					else if (cur_target.(depth) < x.(depth)) then
-							(Node(x,(removeTree_aux cur_target left new_depth),right))
+							(Node(x,count,(removeTree_aux cur_target left new_depth),right))
 					else
-							(Node(x,left,(removeTree_aux cur_target right new_depth))); in
+							(Node(x,count,left,(removeTree_aux cur_target right new_depth))); in
 			removeTree_aux target t 0;;
 
 		(* Get a random 2D points set *)
@@ -289,16 +296,16 @@ module KDTrees :
 		let nns t target toolpack dim =
 			(* Algorithm data *)
 			let w = ref max_float in
-			let p = ref target in
+			let p = ref (target,(-1)) in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
-				| Node(x,left,right) ->
+				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
 					if (new_w < !w) && (x <> target) then
 						(w := new_w;
-						p := x);
+						p := (x,c));
 					(* Visit subtrees *)
 					let target_depth = toolpack.op_to_float target.(depth) in
 					let x_depth = toolpack.op_to_float x.(depth) in
@@ -319,13 +326,13 @@ module KDTrees :
 			let ret = ref [] in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
-				| Node(x,left,right) ->
+				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
 					(* Add it to the list *)
 					if (x <> target) then
-						(ret := (new_w,x)::!ret;
+						(ret := (new_w,(x,c))::!ret;
 						if (new_w < !w) then w := new_w);
 					(* Visit subtrees *)
 					let target_depth = toolpack.op_to_float target.(depth) in
@@ -346,7 +353,7 @@ module KDTrees :
 		(* Path to a node *)
 		let rec compare_path t a depth dim = match t with
 			| EmptyTree -> ()
-			| Node(x,left,right) ->
+			| Node(x,_,left,right) ->
 				if x = a then print_string " ok\n"
 				else
 					if a.(depth) <= x.(depth) then
@@ -359,18 +366,18 @@ module KDTrees :
 		(* Check if it's a kd-tree *)
 		let rec checkTree t depth dim = match t with
 			| EmptyTree -> 0
-			| Node(x,EmptyTree,EmptyTree) -> 0
-			| Node(a,left,right) ->
+			| Node(x,_,EmptyTree,EmptyTree) -> 0
+			| Node(a,_,left,right) ->
 				let new_depth = ((depth+1) mod dim) in
 				match (left,right) with
 					| EmptyTree,EmptyTree -> 0 
-					| Node(x,_,_),EmptyTree ->
+					| Node(x,_,_,_),EmptyTree ->
 						if (x.(depth) > a.(depth)) then 1 + (checkTree left new_depth dim)
 						else (checkTree left new_depth dim)
-					| EmptyTree,Node(y,_,_) ->
+					| EmptyTree,Node(y,_,_,_) ->
 						if (y.(depth) < a.(depth)) then 1 + (checkTree right new_depth dim)
 						else (checkTree right new_depth dim)
-					| (Node(x,_,_),Node(y,_,_)) ->
+					| (Node(x,_,_,_),Node(y,_,_,_)) ->
 						let tmp = ref 0 in
 						if (x.(depth) > a.(depth)) then tmp := !tmp + 1;
 						if (y.(depth) < a.(depth)) then tmp := !tmp + 1;
@@ -379,7 +386,7 @@ module KDTrees :
 	(* Sanity test for NNS *)
 	let sanity_test n =
 		let array_test = (randomPoints (800,800) n) in
-		let tree_test = constructKDT array_test in
+		let (tree_test,_) = constructKDT array_test in
 		Graphics.set_color Graphics.red;
 		drawTree (800,800) tree_test;
 		(* Choose a point *)
@@ -387,7 +394,7 @@ module KDTrees :
 		Graphics.set_color Graphics.blue;
 		Graphics.draw_circle array_test.(num).(0) array_test.(num).(1) 10;
 		(* Find the closest *)
-		let (_,closest) = nns tree_test array_test.(num) int_tools 2 in
+		let (_,(closest,_)) = nns tree_test array_test.(num) int_tools 2 in
 		Graphics.set_color Graphics.green;
 		Graphics.draw_circle closest.(0) closest.(1) 10;
 		(* Return the interssting stuff *)
@@ -399,7 +406,8 @@ module KDTrees :
 		(* Dump the whole tree points *)
 		let rec dump t = match t with
 			| EmptyTree -> []
-			| Node(a,left,right) -> a::(ExtList.List.append (dump right) (dump left)) in
-		constructKDT (Array.of_list (dump tree));;
+			| Node(a,_,left,right) -> a::(ExtList.List.append (dump right) (dump left)) in
+		let (ret,_) = constructKDT (Array.of_list (dump tree)) in
+		ret;;
 
 	end
