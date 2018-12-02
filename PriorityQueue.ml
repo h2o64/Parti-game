@@ -10,7 +10,7 @@ module PriorityQueue :
     type 'a t
     val reset_stats : unit -> unit
     val get_stats : unit -> int * int * int
-    val create : int -> int t
+    val create : int -> 'a -> 'a t
     val is_empty : 'a t -> bool
     val is_in : 'a -> 'a t -> bool
     val top : 'a t -> 'a * int
@@ -52,10 +52,10 @@ module PriorityQueue :
 
 		(* Crée une nouvelle file de taille maximale n *)
 
-		let create n = {
+		let create n init = {
 				maxsize = n;
 				size = 0;
-				data = Array.make n 0;
+				data = Array.make n init;
 				prio = Array.make n 0;
 				index = Hashtbl.create ~random:false 128
 		};;
