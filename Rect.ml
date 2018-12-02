@@ -19,6 +19,7 @@ module Rect :
 		val volume : int rect -> int
 		val union : 'a rect -> 'a rect -> 'a rect
 		val unionMany : 'a rect list -> 'a rect -> 'a rect
+		val split : int rect -> int -> int rect * int rect
 	end =
 	struct
 		(* Structures *)
@@ -165,4 +166,11 @@ module Rect :
 				| h::t -> unionMany_aux t (union h cur) in
 			unionMany_aux rects;;
 
+		(* Split a rectangle in half in a specific axis *)
+		let split rect m =
+			let left_rect = copyRect rect in
+			let right_rect = copyRect rect in
+			left_rect.maxCorner.(m) <- rect.maxCorner.(m) / 2;
+			right_rect.minCorner.(m) <- rect.maxCorner.(m) / 2;
+			(left_rect,right_rect);;
 	end
