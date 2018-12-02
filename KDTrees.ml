@@ -297,15 +297,20 @@ module KDTrees :
 			(* Algorithm data *)
 			let w = ref max_float in
 			let p = ref (target,(-1)) in
+			let target_c = ref (-1) in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
 				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
-					if (new_w < !w) && (x <> target) then
-						(w := new_w;
-						p := (x,c));
+					(* Remenber the target count just in case *)
+					if (x = target) then
+						target_c := c
+					else
+						(if (new_w < !w) then
+							(w := new_w;
+							p := (x,c)));
 					(* Visit subtrees *)
 					let target_depth = toolpack.op_to_float target.(depth) in
 					let x_depth = toolpack.op_to_float x.(depth) in
@@ -317,21 +322,25 @@ module KDTrees :
 						if (target_depth -. !w) <= x_depth then nns_aux left new_depth) in
 
 			nns_aux t 0;
-			(!w,!p);;
+			if (!p = (target,(-1))) then (0.,(target,!target_c)) else (!w,!p);;
 
 		(* k-Nearest Neighbor Search - TODO: Use a stack *)
 		let knns t target k toolpack dim =
 			(* Algorithm data *)
 			let w = ref max_float in
 			let ret = ref [] in
+			let target_c = ref (-1) in
 			let rec nns_aux cur_t depth = match cur_t with
 				| EmptyTree -> ()
 				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
 					let new_w = toolpack.distance_f target x dim in
-					(* Add it to the list *)
-					if (x <> target) then
+					(* Remenber the target count just in case *)
+					if (x = target) then
+						target_c := c
+					else
+						(* Add it to the list *)
 						(ret := (new_w,(x,c))::!ret;
 						if (new_w < !w) then w := new_w);
 					(* Visit subtrees *)
@@ -348,7 +357,9 @@ module KDTrees :
 			let ret_a = (Array.of_list !ret) in
 			Array.fast_sort compare ret_a;
 			let goal_length = if (Array.length ret_a) > k then k else (Array.length ret_a) in
-			Array.sub ret_a 0 goal_length;;
+			let ret = Array.sub ret_a 0 goal_length in
+			if ret = [||] then [|(0.,(target,!target_c))|]
+			else ret;;
 
 		(* Path to a node *)
 		let rec compare_path t a depth dim = match t with
