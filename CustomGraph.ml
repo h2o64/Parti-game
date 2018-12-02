@@ -299,7 +299,6 @@ module CustomGraph :
 			if (g.dim > 5) then failwith "dijkstra: Doesn't work with too high dimensions";
 			(* Get pairing of a point *)
 			let h x = global_pairing cantor_pairing x g.dim in
-			let h_r x = global_reverse cantor_reverse x g.dim in
 			(* Structure of the header :
 					0 -> color
 					1 -> father
@@ -317,10 +316,10 @@ module CustomGraph :
 			let color_ref = Random.bits () in (* Select a random color *)
 			if (get_col r) = color_ref then failwith "dijkstra: Wrong color";
 			let n = Hashtbl.length g.data in
-			let f = PriorityQueue.create n 0 in
+			let f = PriorityQueue.create n [||] in
 			(* Initialisation *)
 			set_dist r 0;
-			PriorityQueue.push ((h r), 0) f;
+			PriorityQueue.push (r, 0) f;
 			(* Work on neighbors *)
 			let rec visit_neigh u l = match l with
 				| [] -> ()
@@ -329,17 +328,16 @@ module CustomGraph :
 							((get_dist v) > (get_dist u) + d || (get_dist v) = -1) then (
 						set_father v u;
 						set_dist v ((get_dist u) + d);
-						if not (PriorityQueue.is_in (h v) f) then
-							PriorityQueue.push ((h v), (get_dist v)) f
+						if not (PriorityQueue.is_in v f) then
+							PriorityQueue.push (v, (get_dist v)) f
 						else
-							PriorityQueue.decrease_prio ((h v), (get_dist v)) f;
+							PriorityQueue.decrease_prio (v, (get_dist v)) f;
 					);
 					visit_neigh u l' in
 			while not (PriorityQueue.is_empty f) do
 				let (u,_) = PriorityQueue.pop f in
-				let co_u = h_r u in
-				set_col co_u color_ref;
-				visit_neigh co_u (nei g co_u m)
+				set_col u color_ref;
+				visit_neigh u (nei g u m)
 			done;;
 
 		(* Compute path between two points given a father array *)
