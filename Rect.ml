@@ -1,12 +1,13 @@
 module Rect :
 	sig
-		type 'a point
 		type 'a rect
+		val get_dim : 'a rect -> int
 		val create : 'a point -> 'a point -> 'a rect
+		val empty : int -> 'a -> 'a rect
 		val validate : 'a rect -> bool
 		val isPoint : 'a rect -> bool
-		val dimensionOfMinWidth : int rect -> int
-		val dimensionOfMaxWidth : int rect -> int
+		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
+		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
 		val setMinCorner : 'a rect -> 'a point -> unit
 		val setMaxCorner : 'a rect -> 'a point -> unit
 		val getMinCorner : 'a rect -> 'b -> 'a point
@@ -16,10 +17,10 @@ module Rect :
 		val contains : 'a rect -> 'a point -> bool
 		val intersection : 'a rect -> 'a rect -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
-		val volume : int rect -> int
+		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a
 		val union : 'a rect -> 'a rect -> 'a rect
-		val unionMany : 'a rect list -> 'a rect -> 'a rect
-		val split : int rect -> int -> int rect * int rect
+		val unionMany : 'a rect list -> 'a rect
+		val split : 'a rect -> int -> ('a -> 'a -> 'a) -> 'a -> 'a rect * 'a rect
 	end =
 	struct
 		(* Structures *)
@@ -30,8 +31,14 @@ module Rect :
 			mutable maxCorner : 'a point;
 		};;
 
+		(* Get the dimension of a rectangle *)
+		let get_dim rect = rect.dim;;
+
 		(* Create a rectangle from points *)
 		let create a b = {dim = (Array.length a) ; minCorner = a ; maxCorner = b};;
+
+		(* Create an empty rectangle *)
+		let empty size zero = create (Array.make size zero) (Array.make size zero);;
 
 		(* Validate a rectangle *)
 		let validate rect =
@@ -58,12 +65,12 @@ module Rect :
 
 		(* Find the index of the dimension having the smallest difference between
 			the minimum vertex and maximum vertex point *)
-		let dimensionOfMinWidth rect =
+		let dimensionOfMinWidth rect minus =
 			let ret = ref 0 in
 			if (rect.dim > 0) then
-				(let minWidth = ref (rect.maxCorner.(0) - rect.minCorner.(0)) in
+				(let minWidth = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
 				for d = 1 to (rect.dim-1) do
-					let width = rect.maxCorner.(d) - rect.minCorner.(d) in
+					let width = minus rect.maxCorner.(d) rect.minCorner.(d) in
 					if width < !minWidth then
 						(minWidth := width;
 						ret := d);
@@ -72,12 +79,12 @@ module Rect :
 
 		(* Find the index of the dimension having the largest difference between
 			the minimum vertex and maximum vertex point *)
-		let dimensionOfMaxWidth rect =
+		let dimensionOfMaxWidth rect minus =
 			let ret = ref 0 in
 			if (rect.dim > 0) then
-				(let minWidth = ref (rect.maxCorner.(0) - rect.minCorner.(0)) in
+				(let minWidth = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
 				for d = 1 to (rect.dim-1) do
-					let width = rect.maxCorner.(d) - rect.minCorner.(d) in
+					let width = minus rect.maxCorner.(d) rect.minCorner.(d) in
 					if width > !minWidth then
 						(minWidth := width;
 						ret := d);
@@ -144,10 +151,10 @@ module Rect :
 			done;!intersect;;
 
 		(* Find the volume of an hyper-rectangle *)
-		let volume rect =
-			let ret = ref 0 in
+		let volume rect minus mul zero =
+			let ret = ref zero in
 			for i = 0 to (rect.dim-1) do
-				ret := !ret * (rect.minCorner.(i) - rect.maxCorner.(i));
+				ret := mul !ret (minus rect.minCorner.(i) rect.maxCorner.(i));
 			done;!ret;;
 
 		(* Union of two rectangles *)
@@ -164,13 +171,13 @@ module Rect :
 			let rec unionMany_aux l cur = match l with
 				| [] -> cur
 				| h::t -> unionMany_aux t (union h cur) in
-			unionMany_aux rects;;
+			unionMany_aux rects (List.hd rects);;
 
 		(* Split a rectangle in half in a specific axis *)
-		let split rect m =
+		let split rect m div two =
 			let left_rect = copyRect rect in
 			let right_rect = copyRect rect in
-			left_rect.maxCorner.(m) <- rect.maxCorner.(m) / 2;
-			right_rect.minCorner.(m) <- rect.maxCorner.(m) / 2;
+			left_rect.maxCorner.(m) <- div rect.maxCorner.(m) two;
+			right_rect.minCorner.(m) <- div rect.maxCorner.(m) two;
 			(left_rect,right_rect);;
 	end
