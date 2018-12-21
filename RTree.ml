@@ -1,5 +1,6 @@
 (* R-Tree structure *)
-let max_node_load = 10;;
+let max_node_load = 7;;
+let min_node_load = 3;;
 type 'a point = 'a array;;
 type ('a,'b) index = {
 	pos : 'a point;
@@ -11,10 +12,13 @@ type ('a,'b) tree =
 	| Empty;;
 
 (* Operations *)
+let add = (+);;
 let minus = (-);;
 let mul = ( * );;
+let div = (/);;
 let abs_f = abs;;
 let zero = 0;;
+let two = 2;;
 
 (* Make empty nodes *)
 let empty_node size = ((Rect.empty zero size),Empty);;
@@ -42,7 +46,7 @@ let rec partition_by_min_enlargement rect = function
 
 (* List cross-product *)
 let pairs_of_list xs =
-  List.concat (List.map (fun x -> List.map (fun y -> (x, y)) xs) xs);;
+  ExtList.List.concat (ExtList.List.map (fun x -> ExtList.List.map (fun y -> (x, y)) xs) xs);;
 
 (* Quadratic-Cost splitting algorithm *)
 (* Select two entries to be the first elements of the groups *)
@@ -92,7 +96,7 @@ let makegroups ns =
 			let (target_rect,_) = target_node in
 			(* TODO: Improve me *)
 			(* Remove target node from the nodes list *)
-			let ns = List.filter ((!=) target_node) t in
+			let ns = ExtList.List.filter ((!=) target_node) t in
 			(* Compute the needed enlargements *)
 			let enlargement_x = enlargement target_rect rect_xs in
 			let enlargement_y = enlargement target_rect rect_ys in
@@ -106,10 +110,10 @@ let makegroups ns =
 	let (e1,_) = node1 in
 	let (e2,_) = node2 in
 	(* Remove node1 and node2 from ns - TODO: Improve me *)
-	let filtered_ns = (List.filter (fun n -> n != node1 && n != node2) ns) in
+	let filtered_ns = (ExtList.List.filter (fun n -> n != node1 && n != node2) ns) in
 	partition [node1] e1 [node2] e2 filtered_ns;;
 	(* Make a large rectangle from nodes *)
-	let rect_of_nodes ns = Rect.unionMany (List.map (fun (e,_) -> e) ns);; 
+	let rect_of_nodes ns = Rect.unionMany (ExtList.List.map (fun (e,_) -> e) ns);; 
 	(* Select a leaf node in which to place a new index e *)
 	(* Prefer the places with the least amount of nodes *)
 	let rec chooseleaf rect_e e = function
@@ -126,7 +130,7 @@ let makegroups ns =
 					(new_rect,Node new_nodes),(empty_node (Rect.get_dim rect_e))
 				| min_a,min_b ->
 					(* Discriminate large nodes loads *)
-					if ((List.length maxs + 2) < max_node_load) then
+					if ((ExtList.List.length maxs + 2) < max_node_load) then
 						let new_nodes = min_a::min_b::maxs in
 						let new_rect = rect_of_nodes new_nodes in
 						(new_rect,Node new_nodes),(empty_node (Rect.get_dim rect_e))
@@ -140,7 +144,7 @@ let makegroups ns =
 			(* Add element to the leaf *)
 			let new_leaf = (rect_e,e)::lf in
 			(* Discriminate large node loads *)
-			if (List.length new_leaf) < max_node_load then
+			if (ExtList.List.length new_leaf) < max_node_load then
 				(rect_of_nodes new_leaf, Leaf new_leaf),(empty_node (Rect.get_dim rect_e))
 			else
 				(* Split the leaf in two optimal groups *)
@@ -157,22 +161,96 @@ let makegroups ns =
 			Node [a;b];;
 
 	(* Get all the rectangles intersecting rect *)
-	let filter_intersecting rect = List.filter (fun (x,_) -> Rect.intersects rect x);;
+	let filter_intersecting rect = ExtList.List.filter (fun (x,_) -> Rect.intersects rect x);;
 
 	(* Find all index records whose rectangles overlap a search rectangle *)
-	let rec search rect t = match t with
-	| Node ns ->
-		let intersecting = filter_intersecting rect ns in
-		let found = List.map (fun (_,n) -> search rect n) intersecting in
-		List.concat found;
-	| Leaf lfs -> List.map snd (filter_intersecting rect lfs)
-	| Empty -> [];;
+	let rec find_leaf rect t = match t with
+		| Node ns ->
+			let intersecting = filter_intersecting rect ns in
+			let found = ExtList.List.map (fun (_,n) -> find_leaf rect n) intersecting in
+			(ExtList.List.concat found);
+		| Leaf lfs -> (filter_intersecting rect lfs)
+		| Empty -> [];;
 
+	(* Get tree size *)
+	let rec size = function
+	  | Node ns ->
+	      let sub_sizes = ExtList.List.map (fun (_,n) -> size n) ns in
+	      ExtList.List.fold_left (+) 0 sub_sizes
+	  | Leaf lfs -> ExtList.List.length lfs
+	  | Empty -> 0;;
 
-(* Get tree size *)
-let rec size = function
-  | Node ns ->
-      let sub_sizes = List.map (fun (_,n) -> size n) ns in
-      List.fold_left (+) 0 sub_sizes
-  | Leaf lfs -> List.length lfs
-  | Empty -> 0;;
+	(* Draw a tree *)
+	let rec draw t =
+		(* Draw subtrees *)
+		let rec draw_nodes ns = match ns with
+			| (r,x)::t ->
+				Graphics.set_color Graphics.blue;
+				(* Rect.draw r; *)
+				draw_nodes t;
+				draw x;
+			| [] -> () in
+		(* Draw leafs *)
+		let rec draw_leaf ns = match ns with
+			| (r,_)::t ->
+				Graphics.set_color Graphics.red;
+				Rect.draw r;
+				draw_leaf t;
+			| [] -> () in
+		match t with
+			| Node ns -> draw_nodes ns
+			| Leaf lfs -> draw_leaf lfs
+			| Empty -> ();;
+
+	(* Get all the rectangles containing the point *)
+	let filter_contains point = ExtList.List.filter (fun (x,_) -> Rect.contains x point);;
+
+	(* Find index record with for containing point *)
+	let rec find_point point t =
+		match t with
+			| Node ns ->
+				let containing = filter_contains point ns in
+				let found = ExtList.List.map (fun (_,n) -> find_point point n) containing in
+				ExtList.List.concat found;
+			| Leaf lfs -> (filter_contains point lfs)
+			| Empty -> [];;
+
+	(* Create a grid tree *)
+	let grid height width resolution =
+		let count = ref 0 in
+		let indexes = ref [] in
+		(* Contruction *)
+		let i = ref resolution in
+		while (!i < (height-resolution)) do
+			let j = ref 0 in
+			while (!j < (width-resolution)) do
+				let cur_rect = Rect.create [|!i;!j|] [|(!i+resolution);(!j+resolution)|] in
+				let center = (Rect.center cur_rect add div two) in
+				indexes := (cur_rect,{pos = center ; data = !count})::!indexes;
+				count := !count + 1;
+				j := !j + resolution;
+			done;
+			i := !i + resolution;
+		done;
+		(* Build the tree *)
+		let rec build_tree l cur_tree = match l with
+			| (r,idx)::t -> build_tree t (insert r idx cur_tree)
+			| [] -> cur_tree in
+		build_tree !indexes Empty;;
+
+		(* Split a node *)
+		let split node axis count t =
+			let (target_rect,target_data) = node in
+			let (rect1,rect2) = Rect.split target_rect axis div two in
+			let tmp_tree = insert rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1} t in
+			insert rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2} tmp_tree;;
+
+		(* Randomly split shit *)
+		let random_test () =
+			let tree_init = ref (grid 600 600 50) in
+			for i = 0 to 500 do
+				let point = [|(Random.int 200);(Random.int 200)|] in
+				let node = (find_point point !tree_init) in
+				if node <> [] then tree_init := split (List.hd node) (Random.int 1) 456789 !tree_init;
+				draw !tree_init;
+			done;;
