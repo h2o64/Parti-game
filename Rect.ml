@@ -1,34 +1,38 @@
+(* Graphic Library *)
+#load "graphics.cma";;
+
 module Rect :
 	sig
 		type 'a rect
 		val get_dim : 'a rect -> int
-		val create : 'a point -> 'a point -> 'a rect
+		val create : 'a array -> 'a array -> 'a rect
 		val empty : int -> 'a -> 'a rect
 		val validate : 'a rect -> bool
 		val isPoint : 'a rect -> bool
+		val center : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a array
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
-		val setMinCorner : 'a rect -> 'a point -> unit
-		val setMaxCorner : 'a rect -> 'a point -> unit
-		val getMinCorner : 'a rect -> 'b -> 'a point
-		val getMaxCorner : 'a rect -> 'b -> 'a point
+		val setMinCorner : 'a rect -> 'a array -> unit
+		val setMaxCorner : 'a rect -> 'a array -> unit
+		val getMinCorner : 'a rect -> 'a array
+		val getMaxCorner : 'a rect -> 'a array
 		val copyRect : 'a rect -> 'a rect
-		val closestPoint : 'a rect -> 'a point -> 'a array ref
-		val contains : 'a rect -> 'a point -> bool
+		val closestPoint : 'a rect -> 'a array -> 'a array
+		val contains : 'a rect -> 'a array -> bool
 		val intersection : 'a rect -> 'a rect -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
 		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a
 		val union : 'a rect -> 'a rect -> 'a rect
 		val unionMany : 'a rect list -> 'a rect
 		val split : 'a rect -> int -> ('a -> 'a -> 'a) -> 'a -> 'a rect * 'a rect
+		val draw : int rect -> unit
 	end =
 	struct
 		(* Structures *)
-		type 'a point = 'a array;;
 		type 'a rect = {
 			dim : int;
-			mutable minCorner : 'a point;
-			mutable maxCorner : 'a point;
+			mutable minCorner : 'a array;
+			mutable maxCorner : 'a array;
 		};;
 
 		(* Get the dimension of a rectangle *)
@@ -63,6 +67,14 @@ module Rect :
 		(* Is this hyper-rectangle a point ? *)
 		let isPoint rect = rect.minCorner <> rect.maxCorner;;
 
+		(* Center of a rectangle *)
+		let center rect add div two =
+			let ret = Array.copy rect.minCorner in
+			for i = 0 to (rect.dim-1) do
+				ret.(i) <- div (add rect.minCorner.(i) rect.maxCorner.(i)) two;
+			done;
+			(ret : 'a array);;
+
 		(* Find the index of the dimension having the smallest difference between
 			the minimum vertex and maximum vertex point *)
 		let dimensionOfMinWidth rect minus =
@@ -94,8 +106,8 @@ module Rect :
 		(* Set/Get the minimum/maximum corners *)
 		let setMinCorner rect a = (rect.minCorner <- a);;
 		let setMaxCorner rect a = (rect.maxCorner <- a);;
-		let getMinCorner rect a = rect.minCorner;;
-		let getMaxCorner rect a = rect.maxCorner;;
+		let getMinCorner rect = rect.minCorner;;
+		let getMaxCorner rect = rect.maxCorner;;
 
 		(* Copy a rectangle *)
 		let copyRect rect =
@@ -105,7 +117,7 @@ module Rect :
 
 		(* Find the closest point on the surface or within 
 			the hyper-rectangle to the specified point *)
-		let closestPoint rect (p : 'a point) =
+		let closestPoint rect (p : 'a array) =
 			let ret = ref (Array.make rect.dim p.(0)) in
 			for i = 0 to (rect.dim-1) do
 				let d = p.(i) in
@@ -115,10 +127,10 @@ module Rect :
 					!ret.(i) <- rect.maxCorner.(i)
 				else
 					!ret.(i) <- d;
-			done;ret;;
+			done;!ret;;
 
 		(* Tell if the rectangle contains a point *)
-		let contains rect (p : 'a point) =
+		let contains rect (p : 'a array) =
 			let i = ref 0 in
 			let searching = ref true in
 			while (!i < rect.dim) && !searching do
@@ -180,4 +192,13 @@ module Rect :
 			left_rect.maxCorner.(m) <- div rect.maxCorner.(m) two;
 			right_rect.minCorner.(m) <- div rect.maxCorner.(m) two;
 			(left_rect,right_rect);;
+
+		(* Draw a 2D rectangle *)
+		let draw rect =
+			let polygon = [|(0,0);(0,0);(0,0);(0,0)|] in
+			polygon.(0) <- (rect.minCorner.(0),rect.minCorner.(1));
+			polygon.(1) <- (rect.maxCorner.(0),rect.minCorner.(1));
+			polygon.(2) <- (rect.maxCorner.(0),rect.maxCorner.(1));
+			polygon.(3) <- (rect.minCorner.(0),rect.maxCorner.(1));
+			Graphics.draw_poly polygon;;
 	end
