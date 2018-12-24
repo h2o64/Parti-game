@@ -25,8 +25,8 @@ let empty_node size = ((Rect.empty zero size),Empty);;
 
 (* Compute minimum enlargement *)
 let enlargement rect_a rect_b =
-		minus (Rect.volume (Rect.union rect_a rect_b) minus mul zero)
-					(Rect.volume rect_b minus mul zero);;
+		minus (Rect.volume (Rect.union rect_a rect_b) minus mul)
+					(Rect.volume rect_b minus mul);;
 (* Return the node with smallest need of enlargement, an ordered list
 	 (by enlargement) of the other nodes depending if they need enlargement or not
 	 and keep track of the last best area *)
@@ -40,7 +40,7 @@ let rec partition_by_min_enlargement rect = function
 		(* Partition other nodes *)
 		let (min,maxs,cur_enlargement) = partition_by_min_enlargement rect ns in
 		(* Find the new best and updates the others *)
-		if needed > cur_enlargement then (node,min::maxs,needed)
+		if needed < cur_enlargement then (node,min::maxs,needed)
 		else (min,node::maxs,cur_enlargement)
 	| [] -> failwith "partition_by_min_enlargement: Empty list";;
 
@@ -53,9 +53,9 @@ let pairs_of_list xs =
 let pickseeds ns =
 	(* Compute the "inefficiency" of grouping given entries *)
 	let cost (rect_a,_) (rect_b,_) =
-		(Rect.volume (Rect.union rect_a rect_b) minus mul zero) - 
-		(Rect.volume rect_a minus mul zero) - 
-		(Rect.volume rect_b minus mul zero) in
+		minus (minus (Rect.volume (Rect.union rect_a rect_b) minus mul)
+		(Rect.volume rect_a minus mul))
+		(Rect.volume rect_b minus mul) in
 	(* Find the couple with largest cost *)
 	let rec max_cost = function
 		| (node1,node2)::[] -> (cost node1 node2),(node1,node2)
@@ -206,21 +206,41 @@ let makegroups ns =
 	let filter_contains point = ExtList.List.filter (fun (x,_) -> Rect.contains x point);;
 
 	(* Find index record with for containing point *)
-	let rec find_point point t =
+	let rec find_point_list point t =
 		match t with
 			| Node ns ->
 				let containing = filter_contains point ns in
-				let found = ExtList.List.map (fun (_,n) -> find_point point n) containing in
+				let found = ExtList.List.map (fun (_,n) -> find_point_list point n) containing in
 				ExtList.List.concat found;
 			| Leaf lfs -> (filter_contains point lfs)
 			| Empty -> [];;
+
+	(* Find the leaf with minimal area *)
+	let find_point point t =
+		let point_list = find_point_list point t in
+		if point_list = [] then failwith "find_point: Point can't be found";
+		let init_nd = (ExtList.List.hd point_list) in
+		let (init_rect,_) = init_nd in
+		let ret_area = ref (Rect.volume init_rect minus mul) in
+		let ret = ref init_nd in
+		(* Choose the minimum *)
+		let rec find_point_aux l = match l with
+			| ((rect,_) as nd)::q ->
+				let vol = Rect.volume rect minus mul in
+				if vol < !ret_area then
+					(ret_area := vol;
+					ret := nd);
+				find_point_aux q
+			| [] -> () in
+		find_point_aux point_list;
+		!ret;;
 
 	(* Create a grid tree *)
 	let grid height width resolution =
 		let count = ref 0 in
 		let indexes = ref [] in
 		(* Contruction *)
-		let i = ref resolution in
+		let i = ref 0 in
 		while (!i < (height-resolution)) do
 			let j = ref 0 in
 			while (!j < (width-resolution)) do
@@ -244,13 +264,3 @@ let makegroups ns =
 			let (rect1,rect2) = Rect.split target_rect axis div two in
 			let tmp_tree = insert rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1} t in
 			insert rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2} tmp_tree;;
-
-		(* Randomly split shit *)
-		let random_test () =
-			let tree_init = ref (grid 600 600 50) in
-			for i = 0 to 500 do
-				let point = [|(Random.int 200);(Random.int 200)|] in
-				let node = (find_point point !tree_init) in
-				if node <> [] then tree_init := split (List.hd node) (Random.int 1) 456789 !tree_init;
-				draw !tree_init;
-			done;;
