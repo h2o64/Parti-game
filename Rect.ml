@@ -14,14 +14,17 @@ module Rect :
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
 		val setMinCorner : 'a rect -> 'a array -> unit
 		val setMaxCorner : 'a rect -> 'a array -> unit
+		val getDimension : 'a rect -> int
 		val getMinCorner : 'a rect -> 'a array
 		val getMaxCorner : 'a rect -> 'a array
 		val copyRect : 'a rect -> 'a rect
 		val closestPoint : 'a rect -> 'a array -> 'a array
 		val contains : 'a rect -> 'a array -> bool
 		val intersection : 'a rect -> 'a rect -> 'a rect
+		val intersectMany : 'a rect list -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
-		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a
+		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
+		val perimeter : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
 		val union : 'a rect -> 'a rect -> 'a rect
 		val unionMany : 'a rect list -> 'a rect
 		val split : 'a rect -> int -> ('a -> 'a -> 'a) -> 'a -> 'a rect * 'a rect
@@ -106,6 +109,7 @@ module Rect :
 		(* Set/Get the minimum/maximum corners *)
 		let setMinCorner rect a = (rect.minCorner <- a);;
 		let setMaxCorner rect a = (rect.maxCorner <- a);;
+		let getDimension rect = rect.dim;;
 		let getMinCorner rect = rect.minCorner;;
 		let getMaxCorner rect = rect.maxCorner;;
 
@@ -153,6 +157,13 @@ module Rect :
 			done;
 			if not !fine then failwith "intersection: Doesn't intersect" else rect_ret;;
 
+		(* Union of multiple rectangles *)
+		let intersectMany rects =
+			let rec intersectMany_aux l cur = match l with
+				| [] -> cur
+				| h::t -> intersectMany_aux t (intersection h cur) in
+			intersectMany_aux rects (List.hd rects);;
+
 		(* Find if two hyper-rectangles are intersecting *)
 		let intersects rect_a rect_b =
 			let i = ref 0 in
@@ -163,10 +174,17 @@ module Rect :
 			done;!intersect;;
 
 		(* Find the volume of an hyper-rectangle *)
-		let volume rect minus mul zero =
-			let ret = ref zero in
-			for i = 0 to (rect.dim-1) do
-				ret := mul !ret (minus rect.minCorner.(i) rect.maxCorner.(i));
+		let volume rect minus mul =
+			let ret = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
+			for i = 1 to (rect.dim-1) do
+				ret := mul !ret (minus rect.maxCorner.(i) rect.minCorner.(i));
+			done;!ret;;
+
+		(* Find the perimeter of an hyper-rectangle *)
+		let perimeter rect minus add =
+			let ret = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
+			for i = 1 to (rect.dim-1) do
+				ret := add !ret (minus rect.maxCorner.(i) rect.minCorner.(i));
 			done;!ret;;
 
 		(* Union of two rectangles *)
