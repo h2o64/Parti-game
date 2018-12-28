@@ -7,8 +7,8 @@ type ('a,'b) index = {
 	data : 'b;
 };;
 type ('a,'b) tree =
-	| Node of ('a Rect.rect * ('a,'b) tree) list
-	| Leaf of ('a Rect.rect * ('a,'b) index) list
+	| Node of ('a Rect.rect ref * ('a,'b) tree ref) list
+	| Leaf of ('a Rect.rect ref * ('a,'b) index) list
 	| Empty;;
 
 (* Operations *)
@@ -21,12 +21,13 @@ let zero = 0;;
 let two = 2;;
 
 (* Make empty nodes *)
-let empty_node size = ((Rect.empty zero size),Empty);;
+let empty_node size = ((ref (Rect.empty zero size)),ref Empty);;
+let empty_ref = ref Empty;;
 
 (* Compute minimum enlargement *)
 let enlargement rect_a rect_b =
-		minus (Rect.volume (Rect.union rect_a rect_b) minus mul)
-					(Rect.volume rect_b minus mul);;
+		minus (Rect.volume (Rect.union !rect_a !rect_b) minus mul)
+					(Rect.volume !rect_b minus mul);;
 (* Return the node with smallest need of enlargement, an ordered list
 	 (by enlargement) of the other nodes depending if they need enlargement or not
 	 and keep track of the last best area *)
@@ -53,9 +54,9 @@ let pairs_of_list xs =
 let pickseeds ns =
 	(* Compute the "inefficiency" of grouping given entries *)
 	let cost (rect_a,_) (rect_b,_) =
-		minus (minus (Rect.volume (Rect.union rect_a rect_b) minus mul)
-		(Rect.volume rect_a minus mul))
-		(Rect.volume rect_b minus mul) in
+		minus (minus (Rect.volume (Rect.union !rect_a !rect_b) minus mul)
+		(Rect.volume !rect_a minus mul))
+		(Rect.volume !rect_b minus mul) in
 	(* Find the couple with largest cost *)
 	let rec max_cost = function
 		| (node1,node2)::[] -> (cost node1 node2),(node1,node2)
@@ -102,9 +103,9 @@ let makegroups ns =
 			let enlargement_y = enlargement target_rect rect_ys in
 			(* Adapt the paritions based on smallest erea *)
 			if enlargement_x < enlargement_y then
-				partition (target_node::xs) (Rect.union rect_xs target_rect) ys rect_ys ns
+				partition (target_node::xs) (ref (Rect.union !rect_xs !target_rect)) ys rect_ys ns
 			else
-				partition xs rect_xs (target_node::ys) (Rect.union rect_ys target_rect) ns in
+				partition xs rect_xs (target_node::ys) (ref (Rect.union !rect_ys !target_rect)) ns in
 	(* Pick the first entry for each group *)
 	let (node1,node2) = pickseeds ns in
 	let (e1,_) = node1 in
@@ -113,7 +114,7 @@ let makegroups ns =
 	let filtered_ns = (ExtList.List.filter (fun n -> n != node1 && n != node2) ns) in
 	partition [node1] e1 [node2] e2 filtered_ns;;
 	(* Make a large rectangle from nodes *)
-	let rect_of_nodes ns = Rect.unionMany (ExtList.List.map (fun (e,_) -> e) ns);; 
+	let rect_of_nodes ns = ref (Rect.unionMany (ExtList.List.map (fun (e,_) -> !e) ns));;
 	(* Select a leaf node in which to place a new index e *)
 	(* Prefer the places with the least amount of nodes *)
 	let rec chooseleaf rect_e e = function
@@ -123,21 +124,21 @@ let makegroups ns =
 			(* Find the subtree with the least enlargement to include e *)
 			let ((_,min),maxs,_) = partition_by_min_enlargement rect_e ns in
 			(* Descend until a leaf if reached *)
-			match (chooseleaf rect_e e min) with
-				| new_min,(_,Empty) ->
+			match (chooseleaf rect_e e !min) with
+				| new_min,(_,empty_tree) when empty_tree = empty_ref ->
 					let new_nodes = new_min::maxs in
 					let new_rect = rect_of_nodes new_nodes in
-					(new_rect,Node new_nodes),(empty_node (Rect.get_dim rect_e))
+					(new_rect,ref (Node new_nodes)),(empty_node (Rect.get_dim !rect_e))
 				| min_a,min_b ->
 					(* Discriminate large nodes loads *)
 					if ((ExtList.List.length maxs + 2) < max_node_load) then
 						let new_nodes = min_a::min_b::maxs in
 						let new_rect = rect_of_nodes new_nodes in
-						(new_rect,Node new_nodes),(empty_node (Rect.get_dim rect_e))
+						(new_rect,ref (Node new_nodes)),(empty_node (Rect.get_dim !rect_e))
 					else
 						(* Split the node in two optimal groups *)
 						let (a,rect_a),(b,rect_b) = makegroups (min_a::min_b::maxs) in
-						(rect_a,Node a),(rect_b,Node b)
+						(rect_a,ref (Node a)),(rect_b,ref (Node b))
 				end
 		| Leaf lf ->
 			(* Leaf case *)
@@ -145,41 +146,37 @@ let makegroups ns =
 			let new_leaf = (rect_e,e)::lf in
 			(* Discriminate large node loads *)
 			if (ExtList.List.length new_leaf) < max_node_load then
-				(rect_of_nodes new_leaf, Leaf new_leaf),(empty_node (Rect.get_dim rect_e))
+				(rect_of_nodes new_leaf, ref (Leaf new_leaf)),(empty_node (Rect.get_dim !rect_e))
 			else
 				(* Split the leaf in two optimal groups *)
 				let (a,rect_a),(b,rect_b) = makegroups new_leaf in
-				(rect_a,Leaf a),(rect_b,Leaf b)
-		| Empty -> (rect_e, Leaf [rect_e,e]), (empty_node (Rect.get_dim rect_e));;
+				(rect_a,(ref (Leaf a))),(rect_b,(ref (Leaf b)))
+		| Empty -> (rect_e,(ref (Leaf [rect_e,e]))),(empty_node (Rect.get_dim !rect_e));;
 	(* Insertion of a node *)
 	let insert rect_e e t = match (chooseleaf rect_e e t) with
-		| (_,a),(_,Empty) ->
+		| (_,a),(_,empty_tree) when empty_tree = empty_ref ->
 			(* There is room *)
-			a
+			!a
 		| a,b ->
 			(* Root split *)
-			Node [a;b];;
-
+			(Node [a;b]);;
 	(* Get all the rectangles intersecting rect *)
-	let filter_intersecting rect = ExtList.List.filter (fun (x,_) -> Rect.intersects rect x);;
-
+	let filter_intersecting rect = ExtList.List.filter (fun (x,_) -> Rect.intersects !rect !x);;
 	(* Find all index records whose rectangles overlap a search rectangle *)
 	let rec find_leaf rect t = match t with
 		| Node ns ->
 			let intersecting = filter_intersecting rect ns in
-			let found = ExtList.List.map (fun (_,n) -> find_leaf rect n) intersecting in
+			let found = ExtList.List.map (fun (_,n) -> find_leaf rect !n) intersecting in
 			(ExtList.List.concat found);
 		| Leaf lfs -> (filter_intersecting rect lfs)
 		| Empty -> [];;
-
 	(* Get tree size *)
 	let rec size = function
 	  | Node ns ->
-	      let sub_sizes = ExtList.List.map (fun (_,n) -> size n) ns in
+	      let sub_sizes = ExtList.List.map (fun (_,n) -> size !n) ns in
 	      ExtList.List.fold_left (+) 0 sub_sizes
 	  | Leaf lfs -> ExtList.List.length lfs
 	  | Empty -> 0;;
-
 	(* Draw a tree *)
 	let rec draw t =
 		(* Draw subtrees *)
@@ -188,45 +185,42 @@ let makegroups ns =
 				Graphics.set_color Graphics.blue;
 				(* Rect.draw r; *)
 				draw_nodes t;
-				draw x;
+				draw !x;
 			| [] -> () in
 		(* Draw leafs *)
 		let rec draw_leaf ns = match ns with
 			| (r,_)::t ->
 				Graphics.set_color Graphics.red;
-				Rect.draw r;
+				Rect.draw !r;
 				draw_leaf t;
 			| [] -> () in
 		match t with
 			| Node ns -> draw_nodes ns
 			| Leaf lfs -> draw_leaf lfs
 			| Empty -> ();;
-
 	(* Get all the rectangles containing the point *)
-	let filter_contains point = ExtList.List.filter (fun (x,_) -> Rect.contains x point);;
-
+	let filter_contains point = ExtList.List.filter (fun (x,_) -> Rect.contains !x point);;
 	(* Find index record with for containing point *)
 	let rec find_point_list point t =
 		match t with
 			| Node ns ->
 				let containing = filter_contains point ns in
-				let found = ExtList.List.map (fun (_,n) -> find_point_list point n) containing in
+				let found = ExtList.List.map (fun (_,n) -> find_point_list point !n) containing in
 				ExtList.List.concat found;
 			| Leaf lfs -> (filter_contains point lfs)
 			| Empty -> [];;
-
 	(* Find the leaf with minimal area *)
 	let find_point point t =
 		let point_list = find_point_list point t in
-		if point_list = [] then failwith "find_point: Point can't be found";
+			if point_list = [] then failwith "find_point: Point can't be found";
 		let init_nd = (ExtList.List.hd point_list) in
 		let (init_rect,_) = init_nd in
-		let ret_area = ref (Rect.volume init_rect minus mul) in
+		let ret_area = ref (Rect.volume !init_rect minus mul) in
 		let ret = ref init_nd in
 		(* Choose the minimum *)
 		let rec find_point_aux l = match l with
 			| ((rect,_) as nd)::q ->
-				let vol = Rect.volume rect minus mul in
+				let vol = Rect.volume !rect minus mul in
 				if vol < !ret_area then
 					(ret_area := vol;
 					ret := nd);
@@ -234,7 +228,6 @@ let makegroups ns =
 			| [] -> () in
 		find_point_aux point_list;
 		!ret;;
-
 	(* Create a grid tree *)
 	let grid height width resolution =
 		let count = ref 0 in
@@ -254,7 +247,7 @@ let makegroups ns =
 		done;
 		(* Build the tree *)
 		let rec build_tree l cur_tree = match l with
-			| (r,idx)::t -> build_tree t (insert r idx cur_tree)
+			| (r,idx)::t -> build_tree t (insert (ref r) idx cur_tree)
 			| [] -> cur_tree in
 		build_tree !indexes Empty;;
 
@@ -262,5 +255,7 @@ let makegroups ns =
 		let split node axis count t =
 			let (target_rect,target_data) = node in
 			let (rect1,rect2) = Rect.split target_rect axis div two in
-			let tmp_tree = insert rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1} t in
-			insert rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2} tmp_tree;;
+			Rect.draw rect1;
+			Rect.draw rect2;
+			let tmp_tree = insert (ref rect1) {pos = (Rect.center rect1 add div two) ; data = count + 1} t in
+			insert (ref rect2) {pos = (Rect.center rect2 add div two) ; data = count + 2} tmp_tree;;
