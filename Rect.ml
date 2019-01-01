@@ -7,9 +7,11 @@ module Rect :
 		val get_dim : 'a rect -> int
 		val create : 'a array -> 'a array -> 'a rect
 		val empty : int -> 'a -> 'a rect
+		val reset : int -> 'a -> 'a -> 'a rect
 		val validate : 'a rect -> bool
 		val isPoint : 'a rect -> bool
 		val center : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a array
+		val distanceFromCenter : 'a rect -> 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a -> 'a
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
 		val setMinCorner : 'a rect -> 'a array -> unit
@@ -23,6 +25,8 @@ module Rect :
 		val intersection : 'a rect -> 'a rect -> 'a rect
 		val intersectMany : 'a rect list -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
+		val overlap : 'a rect -> 'a rect -> 'a -> 'a -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
+		val stretch : 'a rect -> 'a rect -> unit
 		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
 		val perimeter : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
 		val union : 'a rect -> 'a rect -> 'a rect
@@ -46,6 +50,9 @@ module Rect :
 
 		(* Create an empty rectangle *)
 		let empty size zero = create (Array.make size zero) (Array.make size zero);;
+
+		(* Create an empty rectangle *)
+		let reset size biggest lowest = create (Array.make size biggest) (Array.make size lowest);;
 
 		(* Validate a rectangle *)
 		let validate rect =
@@ -77,6 +84,14 @@ module Rect :
 				ret.(i) <- div (add rect.minCorner.(i) rect.maxCorner.(i)) two;
 			done;
 			(ret : 'a array);;
+
+		(* Sums the total distances from the center of another rectangle *)
+		let distanceFromCenter rect_a rect_b mul div add zero two =
+			let ret = ref zero in
+			for i = 0 to (rect_a.dim-1) do
+				let t = div (add (add rect_a.minCorner.(i) rect_a.maxCorner.(i)) (add rect_b.minCorner.(i) rect_b.maxCorner.(i))) two in
+				ret := add !ret (mul t t);
+			done;!ret;;
 
 		(* Find the index of the dimension having the smallest difference between
 			the minimum vertex and maximum vertex point *)
@@ -172,6 +187,41 @@ module Rect :
 				intersect := not ((max rect_a.minCorner.(!i) rect_b.minCorner.(!i))
 									>= (min rect_a.maxCorner.(!i) rect_b.maxCorner.(!i)));
 			done;!intersect;;
+
+		(* Overlap *)
+		let overlap rect_a rect_b zero one minus mul =
+			let area = ref one in
+			let axis = ref 0 in
+			while (!area <> zero) && (!axis < rect_a.dim) do
+				let x1 = rect_a.minCorner.(!axis) in
+				let x2 = rect_a.maxCorner.(!axis) in
+				let y1 = rect_b.minCorner.(!axis) in
+				let y2 = rect_b.maxCorner.(!axis) in
+				(* Left edge outside left edge *)
+				if (x1 < y1) then 
+					(* Right edge inside left edge *)
+					(if (y1 < x2) then
+						(* Right edge outside right edge *)
+						(if (y2 < x2) then area := mul !area (minus y2 y1)
+						else area := mul !area (minus x2 y1));)
+				(* Right edge inside left edge *)
+				else if (x1 < y2) then
+					(* Right edge outside right edge *)
+					(if (x2 < y2) then area := mul !area (minus x2 x1)
+					else area := mul !area (minus y2 x1))
+				else
+					area := zero;
+				axis := !axis + 1;
+			done;!area;;
+
+		(* Fits another rectangle inside of this rectangle *)
+		let stretch rect_a rect_b =
+			for i = 0 to (rect_a.dim-1) do
+				if rect_a.minCorner.(i) > rect_b.minCorner.(i) then
+					rect_a.minCorner.(i) <- rect_b.minCorner.(i);
+				if rect_a.maxCorner.(i) < rect_b.maxCorner.(i) then
+					rect_a.maxCorner.(i) <- rect_b.maxCorner.(i);
+			done;;
 
 		(* Find the volume of an hyper-rectangle *)
 		let volume rect minus mul =
