@@ -1,4 +1,4 @@
-module RTee :
+module RTree :
 	sig
 		type ('a, 'b) bounded_item = {
 		  mutable bb : 'a Rect.rect;
@@ -18,10 +18,11 @@ module RTee :
 		  dimensions : int;
 		}
 		val insert : (int, 'a) tree -> int Rect.rect -> (int, 'a) leaf_data -> unit
-		val grid : int -> int -> int -> (int, int) tree
+		val grid : int -> int -> int -> (int, int) tree * int array array
 		val draw_tree : (int, 'a) tree_struct -> unit
 		val find_point : int array -> (int, 'a) tree -> (int, 'a) tree_struct
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
+		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
 		val split : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> unit
 	end =
 	struct
@@ -433,6 +434,7 @@ module RTee :
 		let grid height width resolution =
 			let count = ref 0 in
 			let indexes = ref [] in
+			let numeral = ref [] in
 			(* Contruction *)
 			let i = ref 0 in
 			while (!i < (height-resolution)) do
@@ -441,6 +443,7 @@ module RTee :
 					let cur_rect = Rect.create [|!i;!j|] [|(!i+resolution);(!j+resolution)|] in
 					let center = (Rect.center cur_rect add div two) in
 					indexes := (cur_rect,{pos = center ; data = !count})::!indexes;
+					numeral := center::(!numeral);
 					count := !count + 1;
 					j := !j + resolution;
 				done;
@@ -452,7 +455,7 @@ module RTee :
 				| (r,idx)::t -> insert ret_tree r idx; build_tree t
 				| [] -> () in
 			build_tree !indexes;
-			ret_tree;;
+			(ret_tree,(Array.of_list !numeral));;
 
 		(* Create a random tree *)
 		let cur_arr = ref [];;
@@ -545,6 +548,9 @@ module RTee :
 			| Leaf fs -> (fs.bb,fs.item.pos,fs.item.data)
 			| _ -> failwith "leaf_to_tuple: Not a leaf";;
 
+		(* Leaf to tuple *)
+		let tuple_to_leaf_data point data = { pos = point ; data = data };;
+
 		(* Split a node *)
 		let split node axis count t =
 			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis div two in
@@ -561,7 +567,7 @@ module RTee :
 			in let () = Printf.printf "Execution time: %fs\n%!" (stop -. start)
 			in res;;
 		let find_bench () =
-			let tr = (grid 3000 3000 50) in
+			let (tr,_) = (grid 3000 3000 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);
@@ -575,7 +581,7 @@ module RTee :
 				Printf.printf "s";
 			done;;
 		let insert_bench () =
-			let tr = (grid 3000 3000 50) in
+			let (tr,_) = (grid 3000 3000 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);
@@ -591,7 +597,7 @@ module RTee :
 				Printf.printf "s";
 			done;;
 		let find_bench () =
-			let tr = (grid 750 750 50) in
+			let (tr,_) = (grid 3000 3000 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);

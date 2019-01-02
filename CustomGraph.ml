@@ -5,7 +5,7 @@ module CustomGraph :
 	type 'a edge
 	type ('a, 'b, 'c) info
 	type ('a, 'b, 'c) graph
-	val create_graph : 'a array array -> (unit -> 'b) -> int -> ('a, 'c, 'b) graph
+	val create_graph : int -> int -> int -> (unit -> 'a) -> int -> (int, 'b, 'a) graph
 	val adj : ('a, 'b, 'c) graph -> node -> node -> int -> bool
 	val nei : ('a, 'b, 'c) graph -> node -> int -> 'b edge list
 	val get_edg : ('a, 'b, 'c) graph -> node -> node -> int -> 'b
@@ -13,13 +13,10 @@ module CustomGraph :
 	val add_edg : ('a, 'b, 'c) graph -> node -> node -> 'b -> int -> unit
 	val add_bunch_edg : ('a, 'b, 'c) graph -> node -> 'b edge list -> int -> unit
 	val rmv_edg : ('a, 'b, 'c) graph -> node -> node -> int -> unit
-	val add_pt : ('a, 'b, 'c) graph -> 'a point -> (unit -> 'c) -> unit
-	val rmv_nd : ('a, 'b, 'c) graph -> node -> unit
-	val rmv_point : ('a, 'b, 'c) graph -> 'a point -> node -> unit
+	val add_pt : (int, 'a, 'b) graph -> int point -> int Rect.rect -> (unit -> 'b) -> unit
 	val get_node : ('a, 'b, 'c) graph -> node -> 'c
 	val set_node : ('a, 'b, 'c) graph -> node -> 'c -> unit
-	val find_node : ('a, 'b, 'c) graph -> 'a point -> 'a KDTrees.distance_tools -> node
-	val rebalance : ('a, 'b, 'c) graph -> unit
+	val find_node : (int, 'a, 'b) graph -> int array -> node
 	val bfs : ('a, 'b, node array) graph -> node -> int -> unit
 	val dijkstra : ('a, int, node array) graph -> node -> int -> unit
 	val compute_path : ('a, 'b, node array) graph -> node -> node -> node list
@@ -40,21 +37,22 @@ module CustomGraph :
 			dim : int;
 			multiplicity : int;
 			mutable count : int;
-			mutable browse : 'a KDTrees.tree;
+			mutable browse : ('a, int) RTree.tree;
 			mutable data : (node, ('a,'b,'c) info) Hashtbl.t;
 		};;
 
-
 		(* Create a graph from points *)
-		let create_graph points init_function multiplicity =
-			(* Create the empty hashtbl *)
-			let length = Array.length points in
+		let create_graph height width resolution init_function multiplicity =
+			(* Fill ratio for hash table *)
 			let ratio = 4 in
-			let hashtbl = Hashtbl.create (length*ratio) in
+			(* Make independent arrays *)
 			let create_list x = [] in
 			let create_empty_nei () = Array.init multiplicity create_list in
 			(* Create the tree *)
-			let (tree,numeral) = (KDTrees.constructKDT points) in
+			let (tree,numeral) = (RTree.grid height width resolution) in
+			(* Create the empty hashtbl *)
+			let length = Array.length numeral in
+			let hashtbl = Hashtbl.create (length*ratio) in
 			for i = 0 to (length-1) do
 				Hashtbl.add hashtbl i {
 					point = numeral.(i);
@@ -62,7 +60,7 @@ module CustomGraph :
 					neigh = (create_empty_nei ());}
 			done;
 			{
-				dim = (Array.length points.(0));
+				dim = 2;
 				count = length;
 				multiplicity = multiplicity;
 				browse = tree;
@@ -117,10 +115,10 @@ module CustomGraph :
 			Hashtbl.replace graph.data x cur_value;;
 
 		(* Add a point *)
-		let add_pt graph point init_function =
-			(* Add to the KDTree *)
+		let add_pt graph point point_box init_function =
+			(* Add to the tree *)
 			graph.count <- graph.count + 1;
-			graph.browse <- KDTrees.addTree point graph.browse graph.count graph.dim;
+			RTree.insert graph.browse point_box (RTree.tuple_to_leaf_data point graph.count);
 			let create_list k = [] in
 			let create_empty_nei () = Array.init graph.multiplicity create_list in
 			(* Add to the hashtbl *)
@@ -142,10 +140,10 @@ module CustomGraph :
 				rmv_nei (nei graph x i) i;
 			done;
 			(* Remove from the hashtbl *)
-			let point = (Hashtbl.find graph.data x).point in
+			(* let point = (Hashtbl.find graph.data x).point in *)
 			Hashtbl.remove graph.data x;
-			(* Add to the KDTree *)
-			graph.browse <- KDTrees.removeTree point graph.browse graph.dim;;
+			(* Add to the tree *)
+			failwith "TODO: Can't remove node yet";;
 
 		(* Remove a point *)
 		let rmv_point graph (point : 'a point) nb =
@@ -161,8 +159,8 @@ module CustomGraph :
 			done;
 			(* Add to the hashtbl *)
 			Hashtbl.remove graph.data nb;
-			(* Add to the KDTree *)
-			graph.browse <- KDTrees.removeTree point graph.browse graph.dim;;
+			(* Add to the tree *)
+			failwith "TODO: Can't remove point yet";;
 
 		(* Get point info *)
 		let get_node graph x = (Hashtbl.find graph.data x).info;;
@@ -174,12 +172,9 @@ module CustomGraph :
 			Hashtbl.replace graph.data x cur_value;;
 
 		(* Find the current cell *)
-		let find_node graph (x : 'a point) distance_tools =
-			let (_,(_,nb)) = KDTrees.nns graph.browse x distance_tools graph.dim in
+		let find_node graph x =
+			let (_,_,nb) = (RTree.leaf_to_tuple (RTree.find_point x graph.browse)) in
 			(nb : node);;
-
-		(* Rebalance the search graph *)
-		let rebalance graph = graph.browse <- (KDTrees.rebalance graph.browse);;
 
 		(* Breadth First Search Algorithm *)
 		let bfs g s m =
