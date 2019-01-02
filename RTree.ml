@@ -392,13 +392,13 @@ let rec long_and l = match l with
 	| h::t -> h && (long_and t)
 	| [] -> true;;
 let data_nb = ref 0;;
-let rec check t = match t with
+let rec check root t = match t with
   | Node ns ->
   	let len = (List.length ns.item.nodes) in
-  	let rest = List.map check ns.item.nodes in
-  	if (len > max_child_items) then failwith "Too much";
-  	(* if (len < min_child_items) then failwith "Not enough"; *)
-  	(len <= max_child_items) (* && (len >= min_child_items) *) && (long_and rest)
+		let rest = List.map (check false) ns.item.nodes in
+		if (len > max_child_items) then failwith "Too much";
+		if (not root) && (len < min_child_items) then failwith "Not enough";
+		(len <= max_child_items) && ((len >= min_child_items) || root) && (long_and rest)
   | Leaf lfs -> data_nb := !data_nb + 1; true
   | Empty -> true;;
 
@@ -447,3 +447,136 @@ let random_tree height width count =
 		| [] -> () in
 	build_tree (List.rev !indexes);
 	ret_tree;;
+
+(* Guttman example tree *)
+let guttman scaling =
+	let tr = { root = Empty ; size = 0 ; dimensions = 2 } in
+	insert tr (Rect.create [|1*scaling;5*scaling|] [|4*scaling;7*scaling|]) { pos = [||] ; data = "R8"};
+	insert tr (Rect.create [|6*scaling;1*scaling|] [|8*scaling;3*scaling|]) { pos = [||] ; data = "R9"};
+	insert tr (Rect.create [|6*scaling;4*scaling|] [|8*scaling;6*scaling|]) { pos = [||] ; data = "R10"};
+	insert tr (Rect.create [|9*scaling;0*scaling|] [|11*scaling;14*scaling|]) { pos = [||] ; data = "R11"};
+	insert tr (Rect.create [|13*scaling;1*scaling|] [|14*scaling;10*scaling|]) { pos = [||] ; data = "R13"};
+	insert tr (Rect.create [|12*scaling;5*scaling|] [|14*scaling;7*scaling|]) { pos = [||] ; data = "R14"};
+	insert tr (Rect.create [|0*scaling;16*scaling|] [|2*scaling;18*scaling|]) { pos = [||] ; data = "R15"};
+	insert tr (Rect.create [|3*scaling;11*scaling|] [|9*scaling;18*scaling|]) { pos = [||] ; data = "R16"};
+	insert tr (Rect.create [|14*scaling;10*scaling|] [|21*scaling;14*scaling|]) { pos = [||] ; data = "R17"};
+	insert tr (Rect.create [|16*scaling;8*scaling|] [|18*scaling;17*scaling|]) { pos = [||] ; data = "R18"};
+	insert tr (Rect.create [|17*scaling;12*scaling|] [|20*scaling;15*scaling|]) { pos = [||] ; data = "R19"};
+	tr;;
+
+(* Draw tree *)
+let rec apply_list f l = match l with
+	| h::t -> (f h); apply_list f t
+	| [] -> ();;
+let rec draw_tree t = match t with
+	| Node nd ->
+		let sub_f h =
+			Graphics.set_color Graphics.red;
+			Rect.draw (assert_both_bb h);
+			draw_tree h in
+			apply_list sub_f nd.item.nodes
+	| Leaf lf ->
+		Graphics.set_color Graphics.blue;
+		Rect.draw lf.bb
+	| Empty -> ();;
+
+(* Get all the rectangles containing the point *)
+let filter_contains point = List.filter (fun x -> Rect.contains (assert_both_bb x) point);;
+
+(* Find index record with for containing point *)
+let rec find_point_list point t =
+	match t with
+		| Node nd ->
+			let containing = filter_contains point nd.item.nodes in
+			let found = List.map (fun x -> find_point_list point x) containing in
+			ExtList.List.concat found;
+		| Leaf lfs -> if Rect.contains lfs.bb point then [t] else []
+		| Empty -> [];;
+
+(* Find the leaf with minimal area *)
+let find_point point t =
+	let point_list = find_point_list point t.root in
+		if point_list = [] then failwith "find_point: Point can't be found";
+	let init_nd = (ExtList.List.hd point_list) in
+	let init_rect = (assert_both_bb init_nd) in
+	let ret_area = ref (Rect.volume init_rect minus mul) in
+	let ret = ref init_nd in
+	(* Choose the minimum *)
+	let rec find_point_aux l = match l with
+		| nd::q ->
+			let vol = Rect.volume (assert_both_bb nd) minus mul in
+			if vol < !ret_area then
+				(ret_area := vol;
+				ret := nd);
+			find_point_aux q
+		| [] -> () in
+	find_point_aux point_list;
+	!ret;;
+
+(* Leaf to tuple *)
+let leaf_to_tuple t = match t with
+	| Leaf fs -> (fs.bb,fs.item.pos,fs.item.data)
+	| _ -> failwith "leaf_to_tuple: Not a leaf";;
+
+(* Split a node *)
+let split node axis count t =
+	let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis div two in
+	Rect.draw rect1;
+	Rect.draw rect2;
+	insert t rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1};
+	insert t rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2};;
+
+(* Benchmarks *)
+let time f x y =
+	let start = Unix.gettimeofday ()
+	in let res = f x y
+	in let stop = Unix.gettimeofday ()
+	in let () = Printf.printf "Execution time: %fs\n%!" (stop -. start)
+	in res;;
+let find_bench () =
+	let tr = (grid 3000 3000 50) in
+	for i = 0 to 20 do
+		print_string "\ncount : ";
+		print_int (500*i);
+		print_string " | It took ";
+		let start = Unix.gettimeofday () in
+		for j = 0 to (500*i) do
+			find_point [|(Random.int 2500);(Random.int 2500)|] tr;
+		done;
+		let stop = Unix.gettimeofday () in
+		print_float (stop -. start);
+		Printf.printf "s";
+	done;;
+let insert_bench () =
+	let tr = (grid 3000 3000 50) in
+	for i = 0 to 20 do
+		print_string "\ncount : ";
+		print_int (500*i);
+		print_string " | It took ";
+		let start = Unix.gettimeofday () in
+		for j = 0 to (500*i) do
+			let r1 = [|(Random.int 2500);(Random.int 2500)|] in
+			let r2 = [|(Random.int 2500);(Random.int 2500)|] in
+			insert tr (Rect.create r1 r2) { pos = r1 ; data = j };
+		done;
+		let stop = Unix.gettimeofday () in
+		print_float (stop -. start);
+		Printf.printf "s";
+	done;;
+let find_bench () =
+	let tr = (grid 750 750 50) in
+	for i = 0 to 20 do
+		print_string "\ncount : ";
+		print_int (500*i);
+		print_string " | It took ";
+		let total_time = ref 0. in
+		for j = 0 to (500*i) do
+			let nd = (find_point [|(Random.int 700);(Random.int 700)|] tr) in
+			let start = Unix.gettimeofday () in
+			split nd (Random.int 2) j tr;
+			let stop = Unix.gettimeofday () in
+			total_time := !total_time +. (stop -. start);
+		done;
+		print_float !total_time;
+		Printf.printf "s";
+	done;;
