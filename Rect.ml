@@ -82,8 +82,7 @@ module Rect :
 			let ret = Array.copy rect.minCorner in
 			for i = 0 to (rect.dim-1) do
 				ret.(i) <- div (add rect.minCorner.(i) rect.maxCorner.(i)) two;
-			done;
-			(ret : 'a array);;
+			done;ret;;
 
 		(* Sums the total distances from the center of another rectangle *)
 		let distanceFromCenter rect_a rect_b mul div add zero two =
@@ -136,7 +135,7 @@ module Rect :
 
 		(* Find the closest point on the surface or within 
 			the hyper-rectangle to the specified point *)
-		let closestPoint rect (p : 'a array) =
+		let closestPoint rect p =
 			let ret = ref (Array.make rect.dim p.(0)) in
 			for i = 0 to (rect.dim-1) do
 				let d = p.(i) in
@@ -149,7 +148,7 @@ module Rect :
 			done;!ret;;
 
 		(* Tell if the rectangle contains a point *)
-		let contains rect (p : 'a array) =
+		let contains rect p =
 			let i = ref 0 in
 			let searching = ref true in
 			while (!i < rect.dim) && !searching do
@@ -184,8 +183,8 @@ module Rect :
 			let i = ref 0 in
 			let intersect = ref true in
 			while (!i < rect_a.dim) && !intersect do
-				intersect := not ((max rect_a.minCorner.(!i) rect_b.minCorner.(!i))
-									>= (min rect_a.maxCorner.(!i) rect_b.maxCorner.(!i)));
+				intersect := (not (rect_a.minCorner.(!i) < rect_b.maxCorner.(!i)))
+									|| (not (rect_b.minCorner.(!i) < rect_a.maxCorner.(!i)))
 			done;!intersect;;
 
 		(* Overlap *)
@@ -243,8 +242,7 @@ module Rect :
 			for i = 0 to (rect_a.dim-1) do
 				rect_ret.minCorner.(i) <- min rect_a.minCorner.(i) rect_b.minCorner.(i);
 				rect_ret.maxCorner.(i) <- max rect_a.maxCorner.(i) rect_b.maxCorner.(i);
-			done;
-			rect_ret;;
+			done;rect_ret;;
 
 		(* Union of multiple rectangles *)
 		let unionMany rects =

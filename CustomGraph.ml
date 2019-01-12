@@ -37,7 +37,7 @@ module CustomGraph :
 			dim : int;
 			multiplicity : int;
 			mutable count : int;
-			mutable browse : ('a, int) RTree.tree;
+			mutable browse : ('a, node) RTree.tree;
 			mutable data : (node, ('a,'b,'c) info) Hashtbl.t;
 		};;
 
@@ -140,10 +140,7 @@ module CustomGraph :
 				rmv_nei (nei graph x i) i;
 			done;
 			(* Remove from the hashtbl *)
-			(* let point = (Hashtbl.find graph.data x).point in *)
-			Hashtbl.remove graph.data x;
-			(* Add to the tree *)
-			failwith "TODO: Can't remove node yet";;
+			Hashtbl.remove graph.data x;;
 
 		(* Remove a point *)
 		let rmv_point graph (point : 'a point) nb =
@@ -158,9 +155,7 @@ module CustomGraph :
 				rmv_nei (nei graph nb i) i;
 			done;
 			(* Add to the hashtbl *)
-			Hashtbl.remove graph.data nb;
-			(* Add to the tree *)
-			failwith "TODO: Can't remove point yet";;
+			Hashtbl.remove graph.data nb;;
 
 		(* Get point info *)
 		let get_node graph x = (Hashtbl.find graph.data x).info;;

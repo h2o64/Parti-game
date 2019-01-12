@@ -23,7 +23,7 @@ module RTree :
 		val find_point : int array -> (int, 'a) tree -> (int, 'a) tree_struct
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> unit
+		val split : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> int array * int array
 	end =
 	struct
 		(* Parameters *)
@@ -554,10 +554,10 @@ module RTree :
 		(* Split a node *)
 		let split node axis count t =
 			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis div two in
-			Rect.draw rect1;
-			Rect.draw rect2;
+			let (center1,center2) = ((Rect.center rect1 add div two),((Rect.center rect2 add div two))) in
 			insert t rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1};
-			insert t rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2};;
+			insert t rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2};
+			(center1,center2);;
 
 		(* Benchmarks *)
 		let time f x y =
@@ -606,7 +606,7 @@ module RTree :
 				for j = 0 to (500*i) do
 					let nd = (find_point [|(Random.int 700);(Random.int 700)|] tr) in
 					let start = Unix.gettimeofday () in
-					split nd (Random.int 2) j tr;
+					match (split nd (Random.int 2) j tr) with _ -> ();
 					let stop = Unix.gettimeofday () in
 					total_time := !total_time +. (stop -. start);
 				done;
