@@ -20,6 +20,7 @@ module RTree :
 		val insert : (int, 'a) tree -> int Rect.rect -> (int, 'a) leaf_data -> unit
 		val grid : int -> int -> int -> (int, int) tree * int array array
 		val draw_tree : (int, 'a) tree_struct -> unit
+		val search_point : 'a array -> ('a, 'b) tree -> bool
 		val find_point : int array -> (int, 'a) tree -> (int, 'a) tree_struct
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
@@ -512,6 +513,19 @@ module RTree :
 
 		(* Get all the rectangles containing the point *)
 		let filter_contains point = List.filter (fun x -> Rect.contains (assert_both_bb x) point);;
+
+		(* Search index record with for containing point *)
+		let rec search_point_t point t =
+			let rec search_point_aux l = match l with
+				| h::t -> if (search_point_t point h) then true else (search_point_aux t)
+				| [] -> false in
+			match t with
+				| Node nd ->
+					let containing = filter_contains point nd.item.nodes in
+					search_point_aux containing
+				| Leaf lfs -> Rect.contains lfs.bb point
+				| Empty -> false;;
+		let search_point point t = search_point_t point t.root;;
 
 		(* Find index record with for containing point *)
 		let rec find_point_list point t =
