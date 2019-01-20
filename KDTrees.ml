@@ -7,7 +7,7 @@ module KDTrees :
 		val randomPoints : int * int -> int -> int array array
 		type 'a tree = EmptyTree | Node of 'a array * int * 'a tree * 'a tree
 		val constructKDT : 'a array array -> ('a tree * 'a array array)
-		val drawTree : int * int -> int tree -> unit
+		val drawTree : int tree -> unit
 		val drawBorders : int tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> int -> 'a tree
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
@@ -20,6 +20,7 @@ module KDTrees :
 		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * ('a array * int)
 		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * ('a array * int)) array
 		val rebalance : 'a tree -> 'a tree
+		val intersect_segment : int array -> int array -> int -> int tree -> bool
   end =
 
   struct
@@ -123,16 +124,12 @@ module KDTrees :
 			((constructKDT_aux 0 (length-1) 0),ret_num);;
 
 		(* Print 2D points in a 2D tree *)
-		let drawTree (h,w) t =
-			(* Make the window  *)
-			Graphics.open_graph (getFormat h w);
-			let rec drawTree_aux t =
-				match t with
-					| EmptyTree -> ()
-					| Node(point,_,left,right) -> ((Graphics.plot point.(0) point.(1));
-															 drawTree_aux left;
-															 drawTree_aux right) in
-			drawTree_aux t;;
+		let rec drawTree t =
+			match t with
+				| EmptyTree -> ()
+				| Node(point,_,left,right) -> ((Graphics.plot point.(0) point.(1));
+														 drawTree left;
+														 drawTree right);;
 
 		(* Draw borders for a 2D Tree *)
 		let drawBorders t =
@@ -362,18 +359,18 @@ module KDTrees :
 			else ret;;
 
 		(* Path to a node *)
-		let rec compare_path t a depth dim = match t with
+		let rec compare_path t a depth dim cur = match t with
 			| EmptyTree -> ()
 			| Node(x,_,left,right) ->
-				if x = a then print_string " ok\n"
+				if not (x <> a) then print_string cur
 				else
 					if a.(depth) <= x.(depth) then
-						(print_string "0";
-						compare_path left a ((depth+1) mod dim) dim)
+						(compare_path left a ((depth+1) mod dim) dim (cur ^ "0");
+						compare_path right a ((depth+1) mod dim) dim (cur ^ "1"))
 					else
-						(print_string "1";
-						compare_path right a ((depth+1) mod dim) dim);;
-					
+						(compare_path right a ((depth+1) mod dim) dim (cur ^ "1");
+						compare_path right a ((depth+1) mod dim) dim (cur ^ "0"));;
+
 		(* Check if it's a kd-tree *)
 		let rec checkTree t depth dim = match t with
 			| EmptyTree -> 0
@@ -399,7 +396,7 @@ module KDTrees :
 		let array_test = (randomPoints (800,800) n) in
 		let (tree_test,_) = constructKDT array_test in
 		Graphics.set_color Graphics.red;
-		drawTree (800,800) tree_test;
+		drawTree tree_test;
 		(* Choose a point *)
 		let num = Random.int n in
 		Graphics.set_color Graphics.blue;
@@ -421,4 +418,133 @@ module KDTrees :
 		let (ret,_) = constructKDT (Array.of_list (dump tree)) in
 		ret;;
 
+	(* Cross points *)
+	(* let cross_points point_a point_b point_c =
+		(* Geometry functions *)
+		(* TODO: Use minus/mul/add *)
+		let crossproduct a b c = ((c.(1) - a.(1)) * (b.(0) - a.(0)) - (c.(0) - a.(0)) * (b.(1) - a.(1))) in
+		let dotproduct a b c = ((c.(0) - a.(0)) * (b.(0) - a.(0)) + (c.(1) - a.(1))*(b.(1) - a.(1))) in
+		let squaredlengthba a b = ((b.(0) - a.(0))*(b.(0) - a.(0)) + (b.(1) - a.(1))*(b.(1) - a.(1))) in
+		let squaredlength = squaredlengthba point_a point_b in
+		let crossproduct = crossproduct point_a point_b point_c in
+		let dotproduct = dotproduct point_a point_b point_c in
+		if ((abs crossproduct) > 0) || (dotproduct < 0) || (dotproduct > squaredlength) then 
+			false
+		else true;; *)
+
+	(* Test if two segments intersects *)
+	(* Vector operations - 2D ONLY *)
+	let add_vect vect_a vect_b = [|(vect_a.(0)+vect_b.(0));(vect_a.(1)+vect_b.(1))|];;
+	let minus_vect vect_a vect_b = [|(vect_a.(0)-vect_b.(0));(vect_a.(1)-vect_b.(1))|];;
+	let dot_vect vect_a vect_b = (vect_a.(0)*vect_b.(0))+(vect_a.(1)*vect_b.(1));;
+	let mul_lambda_vect vect_a lambda = [|(vect_a.(0)*lambda);(vect_a.(1)*lambda)|];;
+	let cross_vect vect_a vect_b = (vect_a.(0)*vect_b.(1))-(vect_a.(1)*vect_b.(0));;
+	let lineSegmentsIntersect p p2 q q2 =
+		let considerCollinearOverlapAsIntersect = true in
+		let r = minus_vect p2 p in
+		let s = minus_vect q2 q in
+		let rxs = cross_vect r s in
+		let qpxr = cross_vect (minus_vect p q) r in
+		let ret = ref false in
+		(* If r x s = 0 and (q - p) x r = 0, then the two lines are collinear. *)
+		(if (rxs = 0) && (qpxr = 0) then
+			(* 1. If either  0 <= (q - p) * r <= r * r or 0 <= (p - q) * s <= * s
+				 then the two lines are overlapping *)
+			if considerCollinearOverlapAsIntersect then
+				begin
+				let qpr = (dot_vect (minus_vect q p) r) in
+				let pqs = (dot_vect (minus_vect p q) s) in
+				if ((0 <= qpr && qpr <= (dot_vect r r)) || (0 <=  pqs && pqs <= (dot_vect s s))) then
+					ret := true
+				else
+					(* 2. If neither 0 <= (q - p) * r = r * r nor 0 <= (p - q) * s <= s * s
+						 then the two lines are collinear but disjoint.
+						 No need to implement this expression, as it follows from the expression above. *)
+					ret := false;
+				end);
+		(* 3. If r x s = 0 and (q - p) x r != 0, then the two lines are parallel and non-intersecting. *)
+		(if not !ret then 
+			(if (rxs = 0) && not (qpxr = 0) then
+				ret := false
+			else
+				(let t = (float_of_int (cross_vect (minus_vect q p) s)) /. (float_of_int rxs) in
+				let u = (float_of_int (cross_vect (minus_vect q p) r)) /. (float_of_int rxs) in
+				let float_precision = 0.00000001 in
+				let neg_float_precision = (-0.00000001) in
+				(* 4. If r x s != 0 and 0 <= t <= 1 and 0 <= u <= 1
+					 the two line segments meet at the point p + t r = q + u s. *)
+				if (not (rxs = 0)) && (neg_float_precision <= t && t <= (1. +. float_precision))
+						&& (neg_float_precision <= u && u <= (1. +. float_precision)) then
+					(* An intersection was found. *)
+					ret := true
+				else
+					(* 5. Otherwise, the two line segments are not parallel but do not intersect. *)
+					ret := false;);););
+		!ret;;
+
+	let cross_points a d point =
+		let x_vect = [|1;0|] in
+		let x_m_vect = [|-1;0|] in
+		let y_vect = [|0;1|] in
+		let y_m_vect = [|0;-1|] in
+		(lineSegmentsIntersect a d point x_vect) || (lineSegmentsIntersect a d point x_m_vect)
+		|| (lineSegmentsIntersect a d point y_vect) || (lineSegmentsIntersect a d point y_m_vect);;
+
+	(* Ray tracing *)
+	(* RTX BOY ! *)
+	(* Segment is defined as S = a + t*d where 0 <= t <= t_max *)
+	let intersect_segment point_a point_b dim tre =
+		(* Tell whether if poin is found *)
+		let found = ref false in
+		let float_precision = 0.00000001 in
+		(* Make vector equation *)
+		let a_init = Array.make dim 0. in
+		let d_init = Array.make dim 0. in
+		let d_int = Array.make dim 0 in
+		for i = 0 to (dim-1) do
+			a_init.(i) <- float_of_int point_a.(i);
+			d_init.(i) <- float_of_int (point_b.(i) - point_a.(i));
+			d_int.(i) <- (point_b.(i) - point_a.(i));
+		done;
+		let rec intersect_segment_aux a d tmax depth tr = match tr with
+			| EmptyTree -> ()
+			| Node(split_pt,_,left,right) ->
+				(* Check if point was found already *)
+				if not !found then
+					begin
+					(* Check if the point if aligned *)
+					if cross_points point_a d_int split_pt then found := true
+					else
+						begin
+						(* Compute depth for future recursive call *)
+						let new_depth = (depth+1) mod dim in
+						(* Figure out which child to recurse into first (0 = near, 1 = far) *)
+						let split_value = (float_of_int split_pt.(depth)) in
+						let (first,second) = if a.(depth) > split_value then
+																	(right,left) else (left,right) in
+						(* Segment parallel to splitting plane, visit near side only *)
+						if (d.(depth) <= float_precision) && (d.(depth) >= (0. -. float_precision)) then
+							intersect_segment_aux a d tmax new_depth first
+						else
+							begin
+							(* Find t value for intersection between segment and split plane *)
+							let t = (split_value -. a.(depth)) /. d.(depth) in
+							(* Test if line segment straddles splitting plane *)
+							if (t >= (0. -. float_precision)) && (t < tmax) then
+								begin
+								(* Yes, traverse near side first, then far side *)
+								intersect_segment_aux a d t new_depth first;
+								if not !found then
+									(for i = 0 to (dim-1) do
+										a.(i) <- a.(i) +. (t *. d.(i));
+									done;
+									intersect_segment_aux a d (tmax -. t) new_depth second;)							end
+							else
+								(*  No, so just traverse near side *)
+								intersect_segment_aux a d tmax new_depth first;
+							end
+						end
+					end in
+		intersect_segment_aux a_init d_init 1. 0 tre;
+		!found;;
 	end

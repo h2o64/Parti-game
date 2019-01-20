@@ -17,14 +17,17 @@ module RTree :
 		  mutable size : int;
 		  dimensions : int;
 		}
+		val empty_tree : int -> ('a, 'b) tree
 		val insert : (int, 'a) tree -> int Rect.rect -> (int, 'a) leaf_data -> unit
 		val grid : int -> int -> int -> (int, int) tree * int array array
-		val draw_tree : (int, 'a) tree_struct -> unit
+		val draw_tree : (int, 'a) tree -> unit
+		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val search_point : 'a array -> ('a, 'b) tree -> bool
 		val find_point : int array -> (int, 'a) tree -> (int, 'a) tree_struct
+		val find_segment : int array -> int array -> (int, 'a) tree -> (int, 'a) tree_struct list
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> int array * int array
+		val split_node : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> int array * int array
 	end =
 	struct
 		(* Parameters *)
@@ -62,6 +65,9 @@ module RTree :
 			mutable size : int;
 			dimensions : int;
 		};;
+
+		(* Return an empty tree *)
+		let empty_tree dim = { root = Empty ; size = 0 ; dimensions = dim };;
 
 		(* Get backtrace *)
 		let backtrace () =
@@ -410,10 +416,10 @@ module RTree :
 		(* Single insert function, adds a new item to the tree *)
 		let insert t bb_e e =
 			let new_leaf = Leaf { bb = bb_e ; item = e } in
-			if t.root = Empty then
-				t.root <- Node { bb = bb_e ; item = { nodes = [new_leaf] ; hasLeaves = true }}
+			(if t.root = Empty then
+				t.root <- Node { bb = (Rect.copyRect bb_e) ; item = { nodes = [new_leaf] ; hasLeaves = true }}
 			else
-				match (insertInternal t new_leaf t.root true) with _ -> ();
+				match (insertInternal t new_leaf t.root true) with _ -> ());
 			t.size<-(t.size+1);;
 
 		(* Get tree size *)
@@ -499,20 +505,30 @@ module RTree :
 		let rec apply_list f l = match l with
 			| h::t -> (f h); apply_list f t
 			| [] -> ();;
-		let rec draw_tree t = match t with
+		let rec draw_tree_t t = match t with
 			| Node nd ->
-				let sub_f h =
-					Graphics.set_color Graphics.red;
-					Rect.draw (assert_both_bb h);
-					draw_tree h in
-					apply_list sub_f nd.item.nodes
+					apply_list draw_tree_t nd.item.nodes
 			| Leaf lf ->
 				Graphics.set_color Graphics.blue;
 				Rect.draw lf.bb
 			| Empty -> ();;
+		let draw_tree t = draw_tree_t t.root;;
+
+		(* Apply a function on index *)
+		let rec apply_tree_t f t = match t with
+			| Node nd ->
+				let sub_f h =
+					apply_tree_t f h in
+					apply_list sub_f nd.item.nodes
+			| Leaf lf -> f lf.item.data;
+			| Empty -> ();;
+		let apply_tree f t = apply_tree_t f t.root;;
 
 		(* Get all the rectangles containing the point *)
 		let filter_contains point = List.filter (fun x -> Rect.contains (assert_both_bb x) point);;
+
+		(* Get all the rectangles containing the segment *)
+		let filter_contains_line point_a point_b = List.filter (fun x -> Rect.contains_line (assert_both_bb x) point_a point_b);;
 
 		(* Search index record with for containing point *)
 		let rec search_point_t point t =
@@ -537,25 +553,38 @@ module RTree :
 				| Leaf lfs -> if Rect.contains lfs.bb point then [t] else []
 				| Empty -> [];;
 
+		(* Find points with segments *)
+		let rec find_segment_t point_a point_b t =
+			match t with
+				| Node nd ->
+					let containing = filter_contains_line point_a point_b nd.item.nodes in
+					let found = List.map (fun x -> find_segment_t point_a point_b x) containing in
+					ExtList.List.concat found;
+				| Leaf lfs -> if Rect.contains_line lfs.bb point_a point_b then
+											[t] else []
+				| Empty -> [];;
+		let find_segment point_a point_b t = find_segment_t point_a point_b t.root;;
+
 		(* Find the leaf with minimal area *)
 		let find_point point t =
 			let point_list = find_point_list point t.root in
-				if point_list = [] then failwith "find_point: Point can't be found";
-			let init_nd = (ExtList.List.hd point_list) in
-			let init_rect = (assert_both_bb init_nd) in
-			let ret_area = ref (Rect.volume init_rect minus mul) in
-			let ret = ref init_nd in
-			(* Choose the minimum *)
-			let rec find_point_aux l = match l with
-				| nd::q ->
-					let vol = Rect.volume (assert_both_bb nd) minus mul in
-					if vol < !ret_area then
-						(ret_area := vol;
-						ret := nd);
-					find_point_aux q
-				| [] -> () in
-			find_point_aux point_list;
-			!ret;;
+			if point_list = [] then Empty
+			else
+				(let init_nd = (ExtList.List.hd point_list) in
+				let init_rect = (assert_both_bb init_nd) in
+				let ret_area = ref (Rect.volume init_rect minus mul) in
+				let ret = ref init_nd in
+				(* Choose the minimum *)
+				let rec find_point_aux l = match l with
+					| nd::q ->
+						let vol = Rect.volume (assert_both_bb nd) minus mul in
+						if vol < !ret_area then
+							(ret_area := vol;
+							ret := nd);
+						find_point_aux q
+					| [] -> () in
+				find_point_aux point_list;
+				!ret);;
 
 		(* Leaf to tuple *)
 		let leaf_to_tuple t = match t with
@@ -566,7 +595,7 @@ module RTree :
 		let tuple_to_leaf_data point data = { pos = point ; data = data };;
 
 		(* Split a node *)
-		let split node axis count t =
+		let split_node node axis count t =
 			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis div two in
 			let (center1,center2) = ((Rect.center rect1 add div two),((Rect.center rect2 add div two))) in
 			insert t rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1};
@@ -620,7 +649,7 @@ module RTree :
 				for j = 0 to (500*i) do
 					let nd = (find_point [|(Random.int 700);(Random.int 700)|] tr) in
 					let start = Unix.gettimeofday () in
-					match (split nd (Random.int 2) j tr) with _ -> ();
+					match (split_node nd (Random.int 2) j tr) with _ -> ();
 					let stop = Unix.gettimeofday () in
 					total_time := !total_time +. (stop -. start);
 				done;

@@ -21,7 +21,8 @@ module Rect :
 		val getMaxCorner : 'a rect -> 'a array
 		val copyRect : 'a rect -> 'a rect
 		val closestPoint : 'a rect -> 'a array -> 'a array
-		val contains : 'a rect -> 'a array -> bool
+ 		val contains_line : int rect -> int array -> int array -> bool
+ 		val contains : 'a rect -> 'a array -> bool
 		val intersection : 'a rect -> 'a rect -> 'a rect
 		val intersectMany : 'a rect list -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
@@ -157,6 +158,35 @@ module Rect :
 					searching := false;
 				i := !i + 1;
 			done;!searching;;
+
+		(* Tell if the rectangle contains a segment *)
+		let contains_line rect point_a_i point_b_i =
+			let point_a = [|(float_of_int point_a_i.(0));(float_of_int point_a_i.(1))|] in
+			let point_b = [|(float_of_int point_b_i.(0));(float_of_int point_b_i.(1))|] in
+			let rectMin = [|(float_of_int rect.minCorner.(0));(float_of_int rect.minCorner.(1))|] in
+			let rectMax = [|(float_of_int rect.maxCorner.(0));(float_of_int rect.maxCorner.(1))|] in
+			let min_x = ref (min point_a.(0) point_b.(0)) in
+			let max_x = ref (max point_a.(0) point_b.(0)) in
+			if !max_x > rectMax.(0) then max_x := rectMax.(0);
+			if !min_x < rectMin.(0) then min_x := rectMin.(0);
+			if !min_x > !max_x then false
+			else
+				(let min_y = ref point_a.(1) in
+				let max_y = ref point_b.(1) in
+				let dx = (point_b.(0) -. point_a.(0)) in
+				if (abs_float dx) > 0.0000001 then
+					(let a = (point_b.(1) -. point_a.(1)) /. dx in
+					let b = point_a.(1) -. (a *. point_a.(0)) in
+					min_y := a *. !min_x +. b;
+					max_y := a *. !max_x +. b;);
+				if (!min_y > !max_y) then
+					(let tmp = !max_y in
+					max_y := !min_y;
+					min_y := tmp);
+				if !max_y > rectMax.(1) then max_y := rectMax.(1);
+				if !min_y < rectMin.(1) then min_y := rectMin.(1);
+				if !min_y > !max_y then false
+				else true);;
 
 		(* Find the intersection of this hyper-rectangle with another *)
 		let intersection rect_a rect_b =
