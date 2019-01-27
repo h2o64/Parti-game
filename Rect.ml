@@ -10,6 +10,7 @@ module Rect :
 		val reset : int -> 'a -> 'a -> 'a rect
 		val validate : 'a rect -> bool
 		val isPoint : 'a rect -> bool
+		val are_equal : 'a rect -> 'a rect -> bool
 		val center : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a array
 		val distanceFromCenter : 'a rect -> 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a -> 'a
 		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
@@ -77,6 +78,15 @@ module Rect :
 
 		(* Is this hyper-rectangle a point ? *)
 		let isPoint rect = rect.minCorner <> rect.maxCorner;;
+
+		(* Are they equal ? *)
+		let are_equal rect_a rect_b =
+			let i = ref 0 in
+			while (!i < rect_a.dim) &&
+				(rect_a.minCorner.(!i) = rect_b.minCorner.(!i)) &&
+				(rect_a.maxCorner.(!i) = rect_b.maxCorner.(!i)) do
+				i := !i + 1;
+			done;(!i >= rect_a.dim);;
 
 		(* Center of a rectangle *)
 		let center rect add div two =
@@ -213,8 +223,9 @@ module Rect :
 			let i = ref 0 in
 			let intersect = ref true in
 			while (!i < rect_a.dim) && !intersect do
-				intersect := (not (rect_a.minCorner.(!i) < rect_b.maxCorner.(!i)))
-									|| (not (rect_b.minCorner.(!i) < rect_a.maxCorner.(!i)))
+				intersect := not ((rect_a.minCorner.(!i) > rect_b.maxCorner.(!i))
+									|| (rect_b.minCorner.(!i) > rect_a.maxCorner.(!i)));
+				i := !i + 1;
 			done;!intersect;;
 
 		(* Overlap *)

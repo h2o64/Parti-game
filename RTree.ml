@@ -19,7 +19,7 @@ module RTree :
 		}
 		val empty_tree : int -> ('a, 'b) tree
 		val insert : (int, 'a) tree -> int Rect.rect -> (int, 'a) leaf_data -> unit
-		val grid : int -> int -> int -> (int, int) tree * int array array
+		val grid : int array -> int -> (int, int) tree * int array array * (int * int list) list
 		val draw_tree : (int, 'a) tree -> unit
 		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val search_point : 'a array -> ('a, 'b) tree -> bool
@@ -437,32 +437,195 @@ module RTree :
 		  | Leaf lfs -> data_nb := !data_nb + 1; true
 		  | Empty -> true;;
 
-		(* Create a grid tree *)
-		let grid height width resolution =
-			let count = ref 0 in
-			let indexes = ref [] in
-			let numeral = ref [] in
-			(* Contruction *)
+		(* Get all the rectangles containing the point *)
+		let filter_contains point = List.filter (fun x -> Rect.contains (assert_both_bb x) point);;
+
+		(* Get all the rectangles containing the point *)
+		let filter_intersect rect = List.filter (fun x -> Rect.intersects (assert_both_bb x) rect);;
+
+		(* Get all the rectangles containing the segment *)
+		let filter_contains_line point_a point_b = List.filter (fun x -> Rect.contains_line (assert_both_bb x) point_a point_b);;
+
+		(* Search index record with for containing point *)
+		let rec search_point_t point t =
+			let rec search_point_aux l = match l with
+				| h::t -> if (search_point_t point h) then true else (search_point_aux t)
+				| [] -> false in
+			match t with
+				| Node nd ->
+					let containing = filter_contains point nd.item.nodes in
+					search_point_aux containing
+				| Leaf lfs -> Rect.contains lfs.bb point
+				| Empty -> false;;
+		let search_point point t = search_point_t point t.root;;
+
+		(* Find index record with for containing point *)
+		let rec find_point_list point t =
+			match t with
+				| Node nd ->
+					let containing = filter_contains point nd.item.nodes in
+					let found = List.map (fun x -> find_point_list point x) containing in
+					ExtList.List.concat found;
+				| Leaf lfs -> if Rect.contains lfs.bb point then [t] else []
+				| Empty -> [];;
+
+		(* Find index record with for containing point *)
+		let rec find_rect mega_rect t =
+			match t with
+				| Node nd ->
+					let containing = filter_intersect mega_rect nd.item.nodes in
+					let found = List.map (fun x -> find_rect mega_rect x) containing in
+					ExtList.List.concat found;
+				| Leaf lfs -> if Rect.intersects lfs.bb mega_rect then [lfs] else []
+				| Empty -> [];;
+
+		(* Find points with segments *)
+		let rec find_segment_t point_a point_b t =
+			match t with
+				| Node nd ->
+					let containing = filter_contains_line point_a point_b nd.item.nodes in
+					let found = List.map (fun x -> find_segment_t point_a point_b x) containing in
+					ExtList.List.concat found;
+				| Leaf lfs -> if Rect.contains_line lfs.bb point_a point_b then
+											[t] else []
+				| Empty -> [];;
+		let find_segment point_a point_b t = find_segment_t point_a point_b t.root;;
+
+		(* Find the leaf with minimal area *)
+		let find_point point t =
+			let point_list = find_point_list point t.root in
+			if point_list = [] then Empty
+			else
+				(let init_nd = (ExtList.List.hd point_list) in
+				let init_rect = (assert_both_bb init_nd) in
+				let ret_area = ref (Rect.volume init_rect minus mul) in
+				let ret = ref init_nd in
+				(* Choose the minimum *)
+				let rec find_point_aux l = match l with
+					| nd::q ->
+						let vol = Rect.volume (assert_both_bb nd) minus mul in
+						if vol < !ret_area then
+							(ret_area := vol;
+							ret := nd);
+						find_point_aux q
+					| [] -> () in
+				find_point_aux point_list;
+				!ret);;
+
+		(* Make a 2D points grid *)
+		let grid_2D sizes resolution =
 			let i = ref 0 in
-			while (!i < (height-resolution)) do
+			let ret = ref [] in
+			while (!i < (sizes.(0)-resolution)) do
 				let j = ref 0 in
-				while (!j < (width-resolution)) do
-					let cur_rect = Rect.create [|!i;!j|] [|(!i+resolution);(!j+resolution)|] in
-					let center = (Rect.center cur_rect add div two) in
-					indexes := (cur_rect,{pos = center ; data = !count})::!indexes;
-					numeral := center::(!numeral);
-					count := !count + 1;
+				while (!j < (sizes.(1)-resolution)) do
+					ret := [!i;!j]::!ret;
 					j := !j + resolution;
 				done;
 				i := !i + resolution;
-			done;
+			done;!ret;;
+
+		(* Make a 3D points grid *)
+		let grid_3D sizes resolution =
+			let i = ref 0 in
+			let ret = ref [] in
+			while (!i < (sizes.(0)-resolution)) do
+				let j = ref 0 in
+				while (!j < (sizes.(1)-resolution)) do
+					let h = ref 0 in
+					while (!h < (sizes.(2)-resolution)) do
+						ret := [!i;!j;!h]::!ret;
+						h := !h + resolution;
+					done;
+					j := !j + resolution;
+				done;
+				i := !i + resolution;
+			done;!ret;;
+
+		(* Add a coordonate to a vector *)
+		let rec vector_concat vector new_vector = match new_vector with
+			| h::t -> (ExtList.List.append vector [h])::(vector_concat vector t)
+			| [] -> [];;
+
+		(* Get all points in any dimension *)
+		let all_points sizes resolution =
+			(* Get space dimension *)
+			let dim = Array.length sizes in
+			if dim = 2 then grid_2D sizes resolution
+			else if dim = 3 then grid_3D sizes resolution
+			else
+				((* 3D Points *)
+				let ret = ref (grid_3D sizes resolution) in
+				(* Get all the low points *)
+				let rec make_possibilities i start =
+					if (start*resolution) >= (sizes.(i)-resolution+1) then []
+					else (start*resolution)::(make_possibilities i (start+1)) in
+				let rec concat_everything vect_list poss = match vect_list with
+					| h::t -> ExtList.List.append (vector_concat h poss) (concat_everything t poss)
+					| [] -> [] in
+				for i = 3 to (dim-1) do
+					let my_poss = make_possibilities i 0 in
+					ret := concat_everything !ret my_poss;
+				done;
+				!ret);;
+
+		(* Split the space in n-dimensionnal hyper-rectangles*)
+		let rect_grid sizes resolution =
+			(* Make the rectangles *)
+			let rec rect_grid_aux l count = match l with
+				| h::t ->
+					let vect = Array.of_list h in
+					let cur_rect = Rect.create vect (Array.map (fun x -> x+resolution) vect) in
+					let center = (Rect.center cur_rect add div two) in
+					(cur_rect,center,count)::(rect_grid_aux t (count+1))
+				| [] -> [] in
+			(rect_grid_aux (all_points sizes resolution) 0);;
+
+		(* Make neiborhood of a rectangle *)
+		let make_nei points resolution dim t =
+			(* Check if points are axis-aligned *)
+			let are_aligned point_a point_b =
+				let i = ref 0 in
+				let fail = ref false in
+				let aligned = ref false in
+				while (!i < dim) && (not !fail) do
+					fail := ((abs (point_a.(!i) - point_b.(!i))) > resolution);
+					aligned := (point_a.(!i) = point_b.(!i)) || !aligned;
+					i := !i + 1;
+				done;
+				!aligned && (not !fail) in
+			let check_centers p dat lf =
+				(dat <> lf.item.data) && (are_aligned p lf.item.pos) in
+			(* Make a neigboorhood from the mega rect intersection *)
+			let rec make_nei_aux l = match l with
+				| (_,p,count)::q ->
+					let mega_min = Array.map (fun x -> x-(resolution/2)) p in
+					let mega_max = Array.map (fun x -> x+resolution+(resolution/2)) p in
+					let mega_rect = Rect.create mega_min mega_max in
+					let candidates = find_rect mega_rect t in
+					if candidates = [] then failwith "HERE";
+					let results = List.filter (check_centers p count) candidates in
+					(count,(List.map (fun x -> x.item.data) results))::(make_nei_aux q)
+				| [] -> [] in
+			make_nei_aux points;;
+
+		(* Create a grid *)
+		let grid sizes resolution =
+			let dim = Array.length sizes in
+			let origins = rect_grid sizes resolution in
+			let nb = List.length origins in
+			let numerals = Array.make nb [||] in
 			(* Build the tree *)
-			let ret_tree = { root = Empty ; size = 0 ; dimensions = 2 } in
+			let ret_tree = { root = Empty ; size = 0 ; dimensions = dim } in
 			let rec build_tree l = match l with
-				| (r,idx)::t -> insert ret_tree r idx; build_tree t
+				| (r,center,count)::t ->
+					insert ret_tree r {pos = center ; data = count};
+					numerals.(count)<-center;
+					build_tree t
 				| [] -> () in
-			build_tree !indexes;
-			(ret_tree,(Array.of_list !numeral));;
+			build_tree origins;
+			let nei = make_nei origins resolution dim ret_tree.root in
+			(ret_tree,numerals,nei);;
 
 		(* Create a random tree *)
 		let cur_arr = ref [];;
@@ -524,68 +687,6 @@ module RTree :
 			| Empty -> ();;
 		let apply_tree f t = apply_tree_t f t.root;;
 
-		(* Get all the rectangles containing the point *)
-		let filter_contains point = List.filter (fun x -> Rect.contains (assert_both_bb x) point);;
-
-		(* Get all the rectangles containing the segment *)
-		let filter_contains_line point_a point_b = List.filter (fun x -> Rect.contains_line (assert_both_bb x) point_a point_b);;
-
-		(* Search index record with for containing point *)
-		let rec search_point_t point t =
-			let rec search_point_aux l = match l with
-				| h::t -> if (search_point_t point h) then true else (search_point_aux t)
-				| [] -> false in
-			match t with
-				| Node nd ->
-					let containing = filter_contains point nd.item.nodes in
-					search_point_aux containing
-				| Leaf lfs -> Rect.contains lfs.bb point
-				| Empty -> false;;
-		let search_point point t = search_point_t point t.root;;
-
-		(* Find index record with for containing point *)
-		let rec find_point_list point t =
-			match t with
-				| Node nd ->
-					let containing = filter_contains point nd.item.nodes in
-					let found = List.map (fun x -> find_point_list point x) containing in
-					ExtList.List.concat found;
-				| Leaf lfs -> if Rect.contains lfs.bb point then [t] else []
-				| Empty -> [];;
-
-		(* Find points with segments *)
-		let rec find_segment_t point_a point_b t =
-			match t with
-				| Node nd ->
-					let containing = filter_contains_line point_a point_b nd.item.nodes in
-					let found = List.map (fun x -> find_segment_t point_a point_b x) containing in
-					ExtList.List.concat found;
-				| Leaf lfs -> if Rect.contains_line lfs.bb point_a point_b then
-											[t] else []
-				| Empty -> [];;
-		let find_segment point_a point_b t = find_segment_t point_a point_b t.root;;
-
-		(* Find the leaf with minimal area *)
-		let find_point point t =
-			let point_list = find_point_list point t.root in
-			if point_list = [] then Empty
-			else
-				(let init_nd = (ExtList.List.hd point_list) in
-				let init_rect = (assert_both_bb init_nd) in
-				let ret_area = ref (Rect.volume init_rect minus mul) in
-				let ret = ref init_nd in
-				(* Choose the minimum *)
-				let rec find_point_aux l = match l with
-					| nd::q ->
-						let vol = Rect.volume (assert_both_bb nd) minus mul in
-						if vol < !ret_area then
-							(ret_area := vol;
-							ret := nd);
-						find_point_aux q
-					| [] -> () in
-				find_point_aux point_list;
-				!ret);;
-
 		(* Leaf to tuple *)
 		let leaf_to_tuple t = match t with
 			| Leaf fs -> (fs.bb,fs.item.pos,fs.item.data)
@@ -610,7 +711,7 @@ module RTree :
 			in let () = Printf.printf "Execution time: %fs\n%!" (stop -. start)
 			in res;;
 		let find_bench () =
-			let (tr,_) = (grid 3000 3000 50) in
+			let (tr,_,_) = (grid [|3000;3000|] 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);
@@ -624,7 +725,7 @@ module RTree :
 				Printf.printf "s";
 			done;;
 		let insert_bench () =
-			let (tr,_) = (grid 3000 3000 50) in
+			let (tr,_,_) = (grid [|3000;3000|] 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);
@@ -640,7 +741,7 @@ module RTree :
 				Printf.printf "s";
 			done;;
 		let find_bench () =
-			let (tr,_) = (grid 3000 3000 50) in
+			let (tr,_,_) = (grid [|3000;3000|] 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
 				print_int (500*i);

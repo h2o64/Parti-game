@@ -11,7 +11,7 @@ module Collision :
 		type 'a scene = ('a, 'a border) RTree.tree
 		val image_to_scene : string -> int -> int scene
 		val draw_scene : int scene -> unit
-		val check_collision : (int, int border) RTree.tree -> int array -> int array -> bool
+		val check_collision : int scene -> int array -> int array -> bool
 	end =
 	struct
 		(* Various types *)

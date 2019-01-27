@@ -1,35 +1,35 @@
 module CustomGraph :
   sig
-	type node
-	type 'a point
 	type 'a edge
 	type ('a, 'b, 'c) info
 	type ('a, 'b, 'c) graph
-	val create_graph : int -> int -> int -> (unit -> 'a) -> int -> (int, 'b, 'a) graph
-	val adj : ('a, 'b, 'c) graph -> node -> node -> int -> bool
-	val nei : ('a, 'b, 'c) graph -> node -> int -> 'b edge list
-	val get_edg : ('a, 'b, 'c) graph -> node -> node -> int -> 'b
-	val set_edg : ('a, 'b, 'c) graph -> node -> node -> 'b -> int -> unit
-	val add_edg : ('a, 'b, 'c) graph -> node -> node -> 'b -> int -> unit
-	val add_bunch_edg : ('a, 'b, 'c) graph -> node -> 'b edge list -> int -> unit
-	val rmv_edg : ('a, 'b, 'c) graph -> node -> node -> int -> unit
-	val add_pt : (int, 'a, 'b) graph -> int point -> int Rect.rect -> (unit -> 'b) -> unit
-	val get_node : ('a, 'b, 'c) graph -> node -> 'c
-	val set_node : ('a, 'b, 'c) graph -> node -> 'c -> unit
-	val find_node : (int, 'a, 'b) graph -> int array -> node
-	val bfs : ('a, 'b, node array) graph -> node -> int -> unit
-	val dijkstra : ('a, int, node array) graph -> node -> int -> unit
-	val compute_path : ('a, 'b, node array) graph -> node -> node -> node list
-	val shortest_path_bfs : ('a, 'b, node array) graph -> node -> node -> int -> node list * node
-	val shortest_path_dijkstra : ('a, int, node array) graph -> node -> node -> int -> node list * node
+	val tuple_of_edge : 'a edge -> int * 'a
+	val get_dim : ('a, 'b, 'c) graph -> int
+	val create_graph : int array -> int -> (unit -> 'a) -> int -> (int, int, 'a) graph
+	val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
+	val nei : ('a, 'b, 'c) graph -> int -> int -> 'b edge list
+	val nei_n : ('a, 'b, 'c) graph -> int -> int -> int list
+	val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b
+	val set_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
+	val add_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
+	val add_bunch_edg : ('a, 'b, 'c) graph -> int -> 'b edge list -> int -> unit
+	val rmv_edg : ('a, 'b, 'c) graph -> int -> int -> int -> unit
+	val add_pt : (int, 'a, 'b) graph -> int array -> int Rect.rect -> (unit -> 'b) -> unit
+	val get_node : ('a, 'b, 'c) graph -> int -> 'c
+	val get_point : ('a, 'b, 'c) graph -> int -> 'a array
+	val set_node : ('a, 'b, 'c) graph -> int -> 'c -> unit
+	val find_node : (int, 'a, 'b) graph -> int array -> int
+	val bfs : ('a, 'b, int array) graph -> int -> int -> unit
+	val dijkstra : ('a, int, int array) graph -> int -> int -> unit
+	val compute_path : ('a, 'b, int array) graph -> int -> int -> int list
+	val shortest_path_bfs : ('a, 'b, int array) graph -> int -> int -> int -> int list * int
+	val shortest_path_dijkstra : ('a, int, int array) graph -> int -> int -> int -> int list * int
   end =
   struct
 		(* Structures *)
-		type node = int;;
-		type 'a point = 'a array;;
-		type 'a edge = node * 'a;;
+		type 'a edge = int * 'a;;
 		type ('a,'b,'c) info = {
-			point : 'a point;
+			point : 'a array;
 			mutable neigh : 'b edge list array;
 			mutable info : 'c;
 		};;	
@@ -37,19 +37,30 @@ module CustomGraph :
 			dim : int;
 			multiplicity : int;
 			mutable count : int;
-			mutable browse : ('a, node) RTree.tree;
-			mutable data : (node, ('a,'b,'c) info) Hashtbl.t;
+			mutable browse : ('a, int) RTree.tree;
+			mutable data : (int, ('a,'b,'c) info) Hashtbl.t;
 		};;
 
+		(* Convert edge to tuple *)
+		let tuple_of_edge ((a,b) : 'a edge) = (a,b);;
+		let edge_of_tuple ((a,b) : 'a * 'b) = ((a,b) : 'a edge);;
+
+		(* Get the dimension *)
+		let get_dim graph = graph.dim;;
+
 		(* Create a graph from points *)
-		let create_graph height width resolution init_function multiplicity =
+		let create_graph sizes resolution init_function multiplicity =
 			(* Fill ratio for hash table *)
 			let ratio = 4 in
+			(* Create the tree *)
+			let (tree,numeral,neis) = (RTree.grid sizes resolution) in
+			let arr_neis = Array.of_list neis in
 			(* Make independent arrays *)
 			let create_list x = [] in
-			let create_empty_nei () = Array.init multiplicity create_list in
-			(* Create the tree *)
-			let (tree,numeral) = (RTree.grid height width resolution) in
+			let create_nei i =
+				(let tmp = Array.init multiplicity create_list in
+				tmp.(0)<-(List.map (fun x -> edge_of_tuple (x,0)) (snd arr_neis.(i)));
+				tmp) in
 			(* Create the empty hashtbl *)
 			let length = Array.length numeral in
 			let hashtbl = Hashtbl.create (length*ratio) in
@@ -57,10 +68,11 @@ module CustomGraph :
 				Hashtbl.add hashtbl i {
 					point = numeral.(i);
 					info = (init_function ());
-					neigh = (create_empty_nei ());}
+					neigh = (create_nei i);
+				}
 			done;
 			{
-				dim = 2;
+				dim = (Array.length numeral.(0));
 				count = length;
 				multiplicity = multiplicity;
 				browse = tree;
@@ -76,6 +88,8 @@ module CustomGraph :
 
 		(* Neighbors - Find neight of x in m *)
 		let nei graph x m = (Hashtbl.find graph.data x).neigh.(m);;
+		let nei_n graph x m =
+			List.map fst (Hashtbl.find graph.data x).neigh.(m);;
 
 		(* Get value of an edge between x and y in m with *)
 		let get_edg graph x y m =
@@ -143,7 +157,7 @@ module CustomGraph :
 			Hashtbl.remove graph.data x;;
 
 		(* Remove a point *)
-		let rmv_point graph (point : 'a point) nb =
+		let rmv_point graph point nb =
 			(* Wipe it's neighbor edges *)
 			let rec rmv_nei l i = match l with
 				| [] -> ()
@@ -159,6 +173,7 @@ module CustomGraph :
 
 		(* Get point info *)
 		let get_node graph x = (Hashtbl.find graph.data x).info;;
+		let get_point graph x = (Hashtbl.find graph.data x).point;;
 
 		(* Set point info *)
 		let set_node graph x info =
@@ -169,7 +184,7 @@ module CustomGraph :
 		(* Find the current cell *)
 		let find_node graph x =
 			let (_,_,nb) = (RTree.leaf_to_tuple (RTree.find_point x graph.browse)) in
-			(nb : node);;
+			nb;;
 
 		(* Breadth First Search Algorithm *)
 		let bfs g s m =
