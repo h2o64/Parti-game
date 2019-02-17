@@ -613,6 +613,7 @@ module RTree :
 			insert tr (Rect.create [|6.*.scaling;4.*.scaling|] [|8.*.scaling;6.*.scaling|]) { pos = [||] ; data = "R10"};
 			insert tr (Rect.create [|9.*.scaling;0.*.scaling|] [|11.*.scaling;14.*.scaling|]) { pos = [||] ; data = "R11"};
 			insert tr (Rect.create [|13.*.scaling;1.*.scaling|] [|14.*.scaling;10.*.scaling|]) { pos = [||] ; data = "R13"};
+			insert tr (Rect.create [|0.*.scaling;16.*.scaling|] [|2.*.scaling;18.*.scaling|]) { pos = [||] ; data = "R15"};
 			insert tr (Rect.create [|12.*.scaling;5.*.scaling|] [|14.*.scaling;7.*.scaling|]) { pos = [||] ; data = "R15"};
 			insert tr (Rect.create [|3.*.scaling;11.*.scaling|] [|9.*.scaling;18.*.scaling|]) { pos = [||] ; data = "R16"};
 			insert tr (Rect.create [|14.*.scaling;10.*.scaling|] [|21.*.scaling;14.*.scaling|]) { pos = [||] ; data = "R17"};
