@@ -11,7 +11,7 @@ module KDTrees :
 		val nns : float tree -> float array -> int -> float * (float array * int)
 		val knns :  float tree -> float array -> int -> int -> (float * (float array * int)) array
 		val rebalance : 'a tree -> 'a tree
-		val intersect_segment : float array -> float array -> int -> float tree -> bool
+		val intersect_segment : float array -> float array -> int -> float tree -> bool * float array
   end =
 
   struct
@@ -402,6 +402,7 @@ module KDTrees :
 		let rxs = cross_vect r s in
 		let qpxr = cross_vect (minus_vect p q) r in
 		let ret = ref false in
+		let ret_point = ref [||] in
 		(* If r x s = 0 and (q - p) x r = 0, then the two lines are collinear. *)
 		(if (is_0 rxs) && (is_0 qpxr) then
 			(* 1. If either  0 <= (q - p) * r <= r * r or 0 <= (p - q) * s <= * s
@@ -429,20 +430,27 @@ module KDTrees :
 					 the two line segments meet at the point p + t r = q + u s. *)
 				if (not (is_0 rxs)) && (neg_precision <= t && t <= (add one precision))
 						&& (neg_precision <= u && u <= (add one precision)) then
+					(* We can calculate the intersection point using either t or u. *)
+					(ret_point := add_vect p (mul_lambda_vect r t);
 					(* An intersection was found. *)
-					ret := true
+					ret := true)
 				else
 					(* 5. Otherwise, the two line segments are not parallel but do not intersect. *)
 					ret := false;);););
-		!ret;;
+		(!ret,!ret_point);;
 
 	let cross_points a d point =
 		let x_vect = [|one;zero|] in
 		let x_m_vect = [|minus zero one;zero|] in
 		let y_vect = [|zero;one|] in
 		let y_m_vect = [|zero;minus zero one|] in
-		(lineSegmentsIntersect a d point x_vect) || (lineSegmentsIntersect a d point x_m_vect)
-		|| (lineSegmentsIntersect a d point y_vect) || (lineSegmentsIntersect a d point y_m_vect);;
+		let rec big_or l = match l with
+			| dir::t ->
+				let (inter,po) = (lineSegmentsIntersect a d point dir) in
+				if inter then (true,po)
+				else big_or t
+			| [] -> (false,[||]) in
+		big_or [x_vect;y_vect;x_m_vect;y_m_vect];;
 
 	(* Ray tracing *)
 	(* RTX BOY ! *)
@@ -450,6 +458,7 @@ module KDTrees :
 	let intersect_segment point_a point_b dim tre =
 		(* Tell whether if poin is found *)
 		let found = ref false in
+		let found_point = ref [||] in
 		(* Make vector equation *)
 		let d_init = Array.make dim zero in
 		for i = 0 to (dim-1) do
@@ -462,7 +471,10 @@ module KDTrees :
 				if not !found then
 					begin
 					(* Check if the point if aligned *)
-					if cross_points point_a d_init split_pt then found := true
+					let (my_bool,my_point) = cross_points point_a d_init split_pt in
+					if my_bool then
+						(found := true;
+						found_point := my_point)
 					else
 						begin
 						(* Compute depth for future recursive call *)
@@ -496,5 +508,5 @@ module KDTrees :
 						end
 					end in
 		intersect_segment_aux (Array.copy point_a) d_init one 0 tre;
-		!found;;
+		(!found,!found_point);;
 	end

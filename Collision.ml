@@ -3,7 +3,7 @@ module Collision :
 		type 'a scene
 		val image_to_scene : string -> int -> float scene
 		val draw_scene : float scene -> unit
-		val check_collision : float scene -> float array -> float array -> bool
+		val check_collision : float scene -> float array -> float array -> bool * float array
 	end =
 	struct
 		(* Various types *)
@@ -33,9 +33,9 @@ module Collision :
 		if (Array.length point_a) <> 2 then failwith "cross_line: 2D Only";
 		match l with
 			| seg::t ->
-				if (cross_segment seg [|point_a;point_b|]) then true
+				if (cross_segment seg [|point_a;point_b|]) then (true,[||])
 				else cross_line point_a point_b t
-			| [] -> false;;
+			| [] -> (false,[||]);;
 
 		(* Cross polygon *)
 		let cross_polygon point_a point_b poly = cross_line point_a point_b poly;;
@@ -89,6 +89,15 @@ module Collision :
 			(float_of_int (r + g + b))/.3.;;
 		(* Convert whole image to greyscale *)
 		let imageToGreyScale image = (matrixApply greyscale_of_rgb image);;
+		(* Fixup a matrix for Graphics conventions *)
+		let fixup m =
+			let (h,w) = getHW m in
+			let n = Array.make_matrix w h m.(0).(0) in
+			for i = 0 to (h-1) do
+					for j = 0 to (w-1) do
+						n.(j).(h-1-i) <- m.(i).(j);
+					done;
+				done;n;;
 
 		(* Randomize an array *)
 		let randomize_array arr n =
@@ -151,20 +160,20 @@ module Collision :
 			done;
 			(* Cover dead pixels *)
 			let (pts1,rect_x1,rect_y1) =
-				matrix_to_points_custom m (h-(h mod resolution_min)) 0 (h-1) (w-1) in
+				matrix_to_points_custom m (h-1-(h mod resolution_min)) 0 (h-1) (w-1) in
 			let (pts2,rect_x2,rect_y2) =
-				matrix_to_points_custom m 0 0 (h-(h mod resolution_min)) (w mod resolution_min) in
+				matrix_to_points_custom m 0 (w-1-(w mod resolution_min)) (h-1-(h mod resolution_min)) (w-1) in
 			tree_edit pts1 rect_x1 rect_y1;
 			tree_edit pts2 rect_x2 rect_y2;
 			((ret_scene,2) : float scene);;
 		let image_to_scene file res =
 			let image = import_image file in
-			let matrix = imageToGreyScale image in
+			let matrix = fixup (imageToGreyScale image) in
 			(matrix_to_scene matrix res);;
 
 		let matrix_get file res =
 			let image = import_image file in
-			let matrix = imageToGreyScale image in
+			let matrix = fixup (imageToGreyScale image) in
 			matrix;;
 
 		(* Draw a scene *)
@@ -172,7 +181,7 @@ module Collision :
 			let draw_kdt t = match t with
 				| Points t -> (KDTrees.drawTree t)
 				| _ -> failwith "draw_scene: Only points for now" in
-			RTree.draw_tree sc_tr;
+			(* RTree.draw_tree sc_tr; *)
 			RTree.apply_tree draw_kdt sc_tr;;
 
 		(* Check if a collision occurs *)
@@ -181,8 +190,9 @@ module Collision :
 			let rec check_collision_aux l = match l with
 				| h::t ->
 					let (_,_,border) = RTree.leaf_to_tuple h in
-					if cross_border point_a point_b border sc_dim then true
+					let (b,po) = cross_border point_a point_b border sc_dim in
+					if b then (true,po)
 					else check_collision_aux t
-				| [] -> false in
+				| [] -> (false,[||]) in
 			check_collision_aux dangers;;
 	end
