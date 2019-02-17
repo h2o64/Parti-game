@@ -27,6 +27,7 @@ let biggest = max_float;;
 let lowest = min_float;;
 let zero = 0.;;
 let one = 1.;;
+let m_one = -1.;;
 let two = 2.;;
 let four = 4.;;
 let to_int = int_of_float;;

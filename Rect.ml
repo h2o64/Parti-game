@@ -35,6 +35,8 @@ module Rect :
 		val unionMany : 'a rect list -> 'a rect
 		val split : float rect -> int -> float rect * float rect
 		val draw : float rect -> unit
+		val uniform_points : int -> float rect -> float array list
+		val liang_barsky_clipper : float array -> float array -> float rect -> float array * float array
 	end =
 	struct
 		(* Structures *)
@@ -309,4 +311,96 @@ module Rect :
 			polygon.(2) <- (to_int rect.maxCorner.(0),to_int rect.maxCorner.(1));
 			polygon.(3) <- (to_int rect.minCorner.(0),to_int rect.maxCorner.(1));
 			Graphics.draw_poly polygon;;
+
+		(* Uniform random points in a rectangle *)
+		let uniform_points nb rect =
+			let random_arr () =
+				let ret = Array.make rect.dim rect.minCorner.(0) in
+				(* Generate a random value *)
+				let random_val i =
+					let ret = ref (Random.float (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one)) in
+					while is_0 !ret do
+						ret := (Random.float (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one));
+					done;(add !ret rect.minCorner.(i)) in
+				for i = 0 to (rect.dim-1) do
+					ret.(i)<-(random_val i);
+				done;ret in
+			let rec build_ret i =
+				if i < 0 then []
+				else (random_arr ())::(build_ret (i-1)) in
+			build_ret nb;;
+
+		(* Liang-Barsky Line-Clipping Algorithm *)
+		let liang_barsky_clipper point_a point_b rect =
+			(* This is 2D only algorithm *)
+			if (Array.length point_a) <> 2 then failwith "liang_barsky_clipper: 2D Only!";
+			(* Notations *)
+			let xmin = rect.minCorner.(0)
+			and xmax = rect.maxCorner.(0)
+			and ymin = rect.minCorner.(1)
+			and ymax = rect.maxCorner.(1)
+			and x1 = point_a.(0)
+			and y1 = point_a.(1)
+			and x2 = point_b.(0)
+			and y2 = point_b.(1) in
+			(* Move variables *)
+			let p1 = mul m_one (minus x2 x1) in
+			let p2 = mul m_one p1 in
+			let p3 = mul m_one (minus y2 y1) in
+			let p4 = mul m_one p3 in
+			let q1 = minus x1 xmin in
+			let q2 = minus xmax x1 in
+			let q3 = minus y1 ymin in
+			let q4 = minus ymax y1 in
+			let posarr = Array.make 5 zero in
+			posarr.(0)<-one;
+			let negarr = Array.make 5 zero in
+			negarr.(0)<-zero;
+			let posind = ref 1
+			and negind = ref 1 in
+			(* Smart increment *)
+			let smart_incr x = (x := !x + 1);(!x-1) in
+			(* If segment is parallel to the rectangle sides *)
+			if (((is_0 p1) && q1 < precision) || ((is_0 p3) && q3 < precision)) then
+				([||],[||])
+			else
+				begin
+				if not (is_0 p1) then
+					(let r1 = div q1 p1 in
+					let r2 = div q2 p2 in
+					if (p1 < precision) then
+						(negarr.((smart_incr negind))<-r1; (* For negative p1, add it to negative array *)
+						posarr.((smart_incr posind))<-r2) (* and add p2 to positive array *)
+					else
+						(negarr.((smart_incr negind))<-r2;
+						posarr.((smart_incr posind))<-r1););
+				if not (is_0 p3) then
+					(let r3 = div q3 p3 in
+					let r4 = div q4 p4 in
+					if (p3 < precision) then
+						(negarr.((smart_incr negind))<-r3;
+						posarr.((smart_incr posind))<-r4)
+					else
+						(negarr.((smart_incr negind))<-r4;
+						posarr.((smart_incr posind))<-r3););
+				(* Maximum of negative array / Minimum of positive array *)
+				let maxi arr n =
+					let m = ref zero in
+					for i = 0 to (n-1) do
+						if (!m < arr.(i)) then m := arr.(i);
+					done;!m in
+				let mini arr n =
+					let m = ref one in
+					for i = 0 to (n-1) do
+						if (!m > arr.(i)) then m := arr.(i);
+					done;!m in
+				let rn1 = maxi negarr !negind in
+				let rn2 = mini posarr !posind in
+				(* If line is outside the rectangle *)
+				if (rn1 > rn2) then
+					([||],[||])
+				else
+					([|(add x1 (mul p2 rn1));(add y1 (mul p4 rn1))|],
+					 [|(add x1 (mul p2 rn2));(add y1 (mul p4 rn2))|]);
+				end;;
 	end
