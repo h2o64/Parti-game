@@ -675,7 +675,7 @@ module RTree :
 				print_string " | It took ";
 				let start = Unix.gettimeofday () in
 				for j = 0 to (500*i) do
-					match (find_point [|(Random.float 2500.);(Random.float 2500.)|] tr) with _ -> ();
+					match (find_point [|(random_f 2500.);(random_f 2500.)|] tr) with _ -> ();
 				done;
 				let stop = Unix.gettimeofday () in
 				print_float (stop -. start);
@@ -689,8 +689,8 @@ module RTree :
 				print_string " | It took ";
 				let start = Unix.gettimeofday () in
 				for j = 0 to (500*i) do
-					let r1 = [|(Random.float 2500.);(Random.float 2500.)|] in
-					let r2 = [|(Random.float 2500.);(Random.float 2500.)|] in
+					let r1 = [|(random_f 2500.);(random_f 2500.)|] in
+					let r2 = [|(random_f 2500.);(random_f 2500.)|] in
 					insert tr (Rect.create r1 r2) { pos = r1 ; data = j };
 				done;
 				let stop = Unix.gettimeofday () in
@@ -705,7 +705,7 @@ module RTree :
 				print_string " | It took ";
 				let total_time = ref 0. in
 				for j = 0 to (500*i) do
-					let nd = (find_point [|(Random.float 700.);(Random.float 700.)|] tr) in
+					let nd = (find_point [|(random_f 700.);(random_f 700.)|] tr) in
 					let start = Unix.gettimeofday () in
 					match (split_node nd (Random.int 2) j tr) with _ -> ();
 					let stop = Unix.gettimeofday () in

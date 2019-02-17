@@ -42,3 +42,4 @@ let is_neg x = x < float_precision;;
 let is_pos_strict x = (x > neg_precision) && (x <> 0.);;
 let is_pos_strict x = (x < precision) && (x <> 0.);;
 let distance_f = distance_float;;
+let random_f = Random.float;;

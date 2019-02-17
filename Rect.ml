@@ -318,9 +318,9 @@ module Rect :
 				let ret = Array.make rect.dim rect.minCorner.(0) in
 				(* Generate a random value *)
 				let random_val i =
-					let ret = ref (Random.float (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one)) in
+					let ret = ref (random_f (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one)) in
 					while is_0 !ret do
-						ret := (Random.float (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one));
+						ret := (random_f (minus (minus rect.maxCorner.(i) rect.minCorner.(i)) one));
 					done;(add !ret rect.minCorner.(i)) in
 				for i = 0 to (rect.dim-1) do
 					ret.(i)<-(random_val i);
