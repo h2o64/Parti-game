@@ -7,10 +7,11 @@ module CustomGraph :
 		val edge_of_tuple : int * int -> int edge
 		val get_dim : ('a, 'b, 'c) graph -> int
 		val create_graph : int array -> int -> (unit -> 'a) -> int -> (float, int, 'a) graph
+		val draw_graph : (float, 'a, 'b) graph -> unit
 		val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
 		val nei : ('a, 'b, 'c) graph -> int -> int -> 'b edge list
 		val nei_n : ('a, 'b, 'c) graph -> int -> int -> int list
-		val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b
+		val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b list
 		val set_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
 		val add_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
 		val add_bunch_edg : ('a, 'b, 'c) graph -> int -> 'b edge list -> int -> unit
@@ -20,6 +21,7 @@ module CustomGraph :
 		val get_point : ('a, 'b, 'c) graph -> int -> 'a array
 		val set_node : ('a, 'b, 'c) graph -> int -> 'c -> unit
 		val find_node : (float, 'a, 'b) graph -> float array -> int
+		val find_rect : (float, 'a, 'b) graph -> float array -> float Rect.rect
 		val bfs : ('a, 'b, int array) graph -> int -> int -> unit
 		val dijkstra : ('a, int, int array) graph -> int -> int -> unit
 		val compute_path : ('a, 'b, int array) graph -> int -> int -> int list
@@ -49,6 +51,9 @@ module CustomGraph :
 		(* Get the dimension *)
 		let get_dim graph = graph.dim;;
 
+		(* Get graph size *)
+		let get_count graph = graph.count;;
+
 		(* Create a graph from points *)
 		let create_graph sizes resolution init_function multiplicity =
 			(* Fill ratio for hash table *)
@@ -60,7 +65,7 @@ module CustomGraph :
 			let create_list x = [] in
 			let create_nei i =
 				(let tmp = Array.init multiplicity create_list in
-				tmp.(0)<-(List.map (fun x -> edge_of_tuple (x,0)) (snd arr_neis.(i)));
+				tmp.(0)<-(List.map (fun x -> edge_of_tuple (x,1)) (snd arr_neis.(i)));
 				tmp) in
 			(* Create the empty hashtbl *)
 			let length = Array.length numeral in
@@ -80,6 +85,9 @@ module CustomGraph :
 				data = hashtbl;
 			};;
 
+		(* Draw a graph *)
+		let draw_graph graph = RTree.draw_tree graph.browse;;
+
 		(* Adjacent - Test wether if x and y are adjacent in m *)
 		let adj graph x y m = 
 			let rec mem y l = match l with
@@ -96,7 +104,7 @@ module CustomGraph :
 		let get_edg graph x y m =
 			let rec get l = match l with
 				| [] -> failwith "Edge not found"
-				| (h,v)::t -> if (h = y) then v else get t in
+				| (h,v)::t -> if (h = y) then v::(get t) else get t in
 			get (Hashtbl.find graph.data x).neigh.(m);;
 
 		(* Set value of an edge between x and y in m with *)
@@ -104,7 +112,7 @@ module CustomGraph :
 			let cur_value = (Hashtbl.find graph.data x) in
 			let rec set l = match l with
 				| [] -> failwith "Edge not found"
-				| (h,_)::t -> if (h = y) then (y,v)::t else set t in
+				| (h,_)::t -> if (h = y) then (y,v)::(set t) else set t in
 			cur_value.neigh.(m) <- set cur_value.neigh.(m);
 			Hashtbl.replace graph.data x cur_value;;
 
@@ -124,7 +132,7 @@ module CustomGraph :
 		let rmv_edg graph x y m =
 			let rec rmv_list l = match l with
 				| [] -> []
-				| (h,v)::t -> if h = y then t else (h,v)::(rmv_list t) in
+				| (h,v)::t -> if h = y then (rmv_list t) else (h,v)::(rmv_list t) in
 			let cur_value = (Hashtbl.find graph.data x) in
 			cur_value.neigh.(m) <- rmv_list cur_value.neigh.(m);
 			Hashtbl.replace graph.data x cur_value;;
@@ -186,6 +194,9 @@ module CustomGraph :
 		let find_node graph x =
 			let (_,_,nb) = (RTree.leaf_to_tuple (RTree.find_point x graph.browse)) in
 			nb;;
+		let find_rect graph x =
+			let (rect,_,_) = (RTree.leaf_to_tuple (RTree.find_point x graph.browse)) in
+			rect;;
 
 		(* Breadth First Search Algorithm *)
 		let bfs g s m =
