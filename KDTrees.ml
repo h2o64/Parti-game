@@ -118,7 +118,7 @@ module KDTrees :
 		(* Print 2D points in a 2D tree *)
 		let rec drawTree t =
 			(* 2D Only function *)
-			print_string "drawTree: 2D Only";
+			(* print_string "drawTree: 2D Only"; *)
 			match t with
 				| EmptyTree -> ()
 				| Node(point,_,left,right) -> ((Graphics.plot (to_int point.(0)) (to_int point.(1)));
@@ -128,7 +128,7 @@ module KDTrees :
 		(* Draw borders for a 2D Tree *)
 		let drawBorders t =
 			(* 2D Only function *)
-			print_string "drawTree: 2D Only";
+			(* print_string "drawTree: 2D Only"; *)
 			(* Set various parameters *)
 			let (h,w) = (Graphics.size_y (),Graphics.size_x ()) in
 			Graphics.set_line_width 1;
@@ -360,7 +360,7 @@ module KDTrees :
 	(* Sanity test for NNS *)
 	let sanity_test n =
 		(* 2D Only function *)
-		print_string "sanity_test: 2D Only";
+		(* print_string "sanity_test: 2D Only"; *)
 		let array_test = (randomPoints (800.,800.) n) in
 		let (tree_test,_) = constructKDT array_test in
 		Graphics.set_color Graphics.red;
