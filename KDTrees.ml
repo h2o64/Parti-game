@@ -3,24 +3,15 @@
 
 module KDTrees :
   sig
-		val drawPoints : int array array -> unit
-		val randomPoints : int * int -> int -> int array array
-		type 'a tree = EmptyTree | Node of 'a array * int * 'a tree * 'a tree
-		val constructKDT : 'a array array -> ('a tree * 'a array array)
-		val drawTree : int tree -> unit
-		val drawBorders : int tree -> unit
+		type 'a tree
+		val constructKDT : 'a array array -> 'a tree * 'a array array
+		val drawTree : float tree -> unit
 		val addTree : 'a array -> 'a tree -> int -> int -> 'a tree
 		val removeTree : 'a array -> 'a tree -> int -> 'a tree
-		val uniformPoints : int * int -> int -> int -> bool -> int array array
-		val distance_int : int array -> int array -> int -> float
-		val distance_float : float array -> float array -> int -> float
-		type 'a distance_tools
-		val int_tools : int distance_tools
-		val float_tools : float distance_tools
-		val nns : 'a tree -> 'a array -> 'a distance_tools -> int -> float * ('a array * int)
-		val knns : 'a tree -> 'a array -> int -> 'a distance_tools -> int -> (float * ('a array * int)) array
+		val nns : float tree -> float array -> int -> float * (float array * int)
+		val knns :  float tree -> float array -> int -> int -> (float * (float array * int)) array
 		val rebalance : 'a tree -> 'a tree
-		val intersect_segment : int array -> int array -> int -> int tree -> bool
+		val intersect_segment : float array -> float array -> int -> float tree -> bool
   end =
 
   struct
@@ -32,26 +23,27 @@ module KDTrees :
 
 		(* Draw a set of 2D points *)
 		let drawPoints points =
+			(* 2D Only function *)
+			if (Array.length points.(0) <> 2) then failwith "drawPoints: 2D Only";
 			(* Sorts points *)
 			let n = Array.length points in
 			Array.fast_sort compare points;
 			(* Make the window - Force (0,0) to be the origin *)
-			let (max_x,max_y) = (points.(n-1).(0),points.(n-1).(1)) in
+			let (max_x,max_y) = (to_int points.(n-1).(0),to_int points.(n-1).(1)) in
 			Graphics.open_graph (getFormat max_x max_y);
 			(* Fill the window *)
 			for i = 0 to (n-1) do
-				Graphics.plot points.(i).(0) points.(i).(1);
+				Graphics.plot (to_int points.(i).(0)) (to_int points.(i).(1));
 			done;;
 
 		(* Get a random 2D points set *)
 		let randomPoints (h,w) n =
-			let ret = Array.make (n+1) [|0;0|] in
+			let ret = Array.make (n+1) [|zero;zero|] in
 			for i = 0 to n do
-				ret.(i) <- [|(Random.int w);(Random.int h)|];
+				ret.(i) <- [|(Random.float w);(Random.float h)|];
 			done;ret;;
 
 		(* Constuct a tree *)
-		let example = [| [|2;3|]; [|5;4|]; [|9;6|]; [|4;7|]; [|8;1|]; [|7;2|] |];;
 		type 'a tree =
 			| EmptyTree
 			| Node of ('a array) * int * ('a tree) * ('a tree);;
@@ -125,14 +117,18 @@ module KDTrees :
 
 		(* Print 2D points in a 2D tree *)
 		let rec drawTree t =
+			(* 2D Only function *)
+			print_string "drawTree: 2D Only";
 			match t with
 				| EmptyTree -> ()
-				| Node(point,_,left,right) -> ((Graphics.plot point.(0) point.(1));
+				| Node(point,_,left,right) -> ((Graphics.plot (to_int point.(0)) (to_int point.(1)));
 														 drawTree left;
 														 drawTree right);;
 
 		(* Draw borders for a 2D Tree *)
 		let drawBorders t =
+			(* 2D Only function *)
+			print_string "drawTree: 2D Only";
 			(* Set various parameters *)
 			let (h,w) = (Graphics.size_y (),Graphics.size_x ()) in
 			Graphics.set_line_width 1;
@@ -143,22 +139,22 @@ module KDTrees :
 					if ((i mod 2) = 0) then
 						(Graphics.set_color Graphics.red;
 						if side = 0 then
-							(Graphics.moveto point.(0) 0;
-							Graphics.lineto point.(0) median_point.(1))
+							(Graphics.moveto (to_int point.(0)) 0;
+							Graphics.lineto (to_int point.(0)) (to_int median_point.(1)))
 						else
-							(Graphics.moveto point.(0) h;
-							Graphics.lineto point.(0) median_point.(1)))
+							(Graphics.moveto (to_int point.(0)) h;
+							Graphics.lineto (to_int point.(0)) (to_int median_point.(1))))
 					else
 						(Graphics.set_color Graphics.blue;
 						if side = 0 then
-							(Graphics.moveto 0 point.(1);
-							Graphics.lineto median_point.(0) point.(1))
+							(Graphics.moveto 0 (to_int point.(1));
+							Graphics.lineto (to_int median_point.(0)) (to_int point.(1)))
 						else
-							(Graphics.moveto median_point.(0) point.(1);
-							Graphics.lineto w point.(1)););
+							(Graphics.moveto (to_int median_point.(0)) (to_int point.(1));
+							Graphics.lineto w (to_int point.(1))););
 					drawBorders_aux left (i+1) point 0;
 					drawBorders_aux right (i+1) point 1 in
-			drawBorders_aux t 0 [|h;w|] 0;;
+			drawBorders_aux t 0 [|of_int h;of_int w|] 0;;
 
 		(* Add an element to tree - Breaks balancing *)
 		let addTree x t count dim =
@@ -246,13 +242,13 @@ module KDTrees :
 
 		(* Get a random 2D points set *)
 		let uniformPoints (h,w) per_line per_row random =
-			let ret = Array.make (((per_line+1)*(per_row+1))+1) [|0;0|] in
+			let ret = Array.make (((per_line+1)*(per_row+1))+1) [|zero;zero|] in
 			let delta_x = w/per_line in
 			let delta_y = h/per_row in
 			let cur = ref 0 in
 			for i = 0 to per_line do
 				for j = 0 to per_row do
-					ret.(!cur) <- [|i*delta_x;j*delta_y|];
+					ret.(!cur) <- [|of_int (i*delta_x);of_int (j*delta_y)|];
 					cur := !cur + 1;
 				done;
 			done;
@@ -263,36 +259,10 @@ module KDTrees :
 				done;ret)
 			else ret;;
 
-		(* Squared distances *)
-		let distance_int a b length =
-			let ret = ref 0 in
-			for i = 0 to (length-1) do
-				ret := !ret + ((a.(i) - b.(i)) * (a.(i) - b.(i)))
-			done;(sqrt (float_of_int !ret));;
-		let distance_float a b length =
-			let ret = ref 0. in
-			for i = 0 to (length-1) do
-				ret := !ret +. ((a.(i) -. b.(i)) *. (a.(i) -. b.(i)))
-			done;(sqrt !ret);;
-
-		(* Algebra toolpack *)
-		type 'a distance_tools = {
-				op_to_float : ('a -> float);
-				distance_f : ('a array -> 'a array -> int -> float);
-				};;
-		let int_tools = {
-				op_to_float = float_of_int;
-				distance_f = distance_int;
-				};;
-		let float_tools = {
-				op_to_float = (let f x = x in f);
-				distance_f = distance_float;
-				};;
-
 		(* Nearest Neighbor Search *)
-		let nns t target toolpack dim =
+		let nns t target dim =
 			(* Algorithm data *)
-			let w = ref max_float in
+			let w = ref biggest in
 			let p = ref (target,(-1)) in
 			let target_c = ref (-1) in
 			let rec nns_aux cur_t depth = match cur_t with
@@ -300,7 +270,7 @@ module KDTrees :
 				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
-					let new_w = toolpack.distance_f target x dim in
+					let new_w = distance_f target x dim in
 					(* Remenber the target count just in case *)
 					if (x = target) then
 						target_c := c
@@ -309,22 +279,20 @@ module KDTrees :
 							(w := new_w;
 							p := (x,c)));
 					(* Visit subtrees *)
-					let target_depth = toolpack.op_to_float target.(depth) in
-					let x_depth = toolpack.op_to_float x.(depth) in
 					if target.(depth) <= x.(depth) then
 						(nns_aux left new_depth;
-						if (target_depth +. !w) >= x_depth then nns_aux right new_depth)
+						if (add target.(depth) !w) >= x.(depth) then nns_aux right new_depth)
 					else
 						(nns_aux right new_depth;
-						if (target_depth -. !w) <= x_depth then nns_aux left new_depth) in
+						if (minus target.(depth) !w) <= x.(depth) then nns_aux left new_depth) in
 
 			nns_aux t 0;
-			if (!p = (target,(-1))) then (0.,(target,!target_c)) else (!w,!p);;
+			if (!p = (target,(-1))) then (zero,(target,!target_c)) else (!w,!p);;
 
 		(* k-Nearest Neighbor Search - TODO: Use a stack *)
-		let knns t target k toolpack dim =
+		let knns t target k dim =
 			(* Algorithm data *)
-			let w = ref max_float in
+			let w = ref biggest in
 			let ret = ref [] in
 			let target_c = ref (-1) in
 			let rec nns_aux cur_t depth = match cur_t with
@@ -332,7 +300,7 @@ module KDTrees :
 				| Node(x,c,left,right) ->
 					let new_depth = ((depth+1) mod dim) in
 					(* Check is the point is better than the best *)
-					let new_w = toolpack.distance_f target x dim in
+					let new_w = distance_f target x dim in
 					(* Remenber the target count just in case *)
 					if (x = target) then
 						target_c := c
@@ -341,21 +309,19 @@ module KDTrees :
 						(ret := (new_w,(x,c))::!ret;
 						if (new_w < !w) then w := new_w);
 					(* Visit subtrees *)
-					let target_depth = toolpack.op_to_float target.(depth) in
-					let x_depth = toolpack.op_to_float x.(depth) in
 					if target.(depth) <= x.(depth) then
 						(nns_aux left new_depth;
-						if (target_depth +. !w) >= x_depth then nns_aux right new_depth)
+						if (add target.(depth) !w) >= x.(depth) then nns_aux right new_depth)
 					else
 						(nns_aux right new_depth;
-						if (target_depth -. !w) <= x_depth then nns_aux left new_depth) in
+						if (minus target.(depth) !w) <= x.(depth) then nns_aux left new_depth) in
 			nns_aux t 0;
 			(* Return the best k *)
 			let ret_a = (Array.of_list !ret) in
 			Array.fast_sort compare ret_a;
 			let goal_length = if (Array.length ret_a) > k then k else (Array.length ret_a) in
 			let ret = Array.sub ret_a 0 goal_length in
-			if ret = [||] then [|(0.,(target,!target_c))|]
+			if ret = [||] then [|(zero,(target,!target_c))|]
 			else ret;;
 
 		(* Path to a node *)
@@ -393,18 +359,20 @@ module KDTrees :
 
 	(* Sanity test for NNS *)
 	let sanity_test n =
-		let array_test = (randomPoints (800,800) n) in
+		(* 2D Only function *)
+		print_string "sanity_test: 2D Only";
+		let array_test = (randomPoints (800.,800.) n) in
 		let (tree_test,_) = constructKDT array_test in
 		Graphics.set_color Graphics.red;
 		drawTree tree_test;
 		(* Choose a point *)
 		let num = Random.int n in
 		Graphics.set_color Graphics.blue;
-		Graphics.draw_circle array_test.(num).(0) array_test.(num).(1) 10;
+		Graphics.draw_circle (to_int array_test.(num).(0)) (to_int array_test.(num).(1)) 10;
 		(* Find the closest *)
-		let (_,(closest,_)) = nns tree_test array_test.(num) int_tools 2 in
+		let (_,(closest,_)) = nns tree_test array_test.(num) 2 in
 		Graphics.set_color Graphics.green;
-		Graphics.draw_circle closest.(0) closest.(1) 10;
+		Graphics.draw_circle (to_int closest.(0)) (to_int closest.(1)) 10;
 		(* Return the interssting stuff *)
 		(array_test.(num),array_test);;
 
@@ -418,28 +386,16 @@ module KDTrees :
 		let (ret,_) = constructKDT (Array.of_list (dump tree)) in
 		ret;;
 
-	(* Cross points *)
-	(* let cross_points point_a point_b point_c =
-		(* Geometry functions *)
-		(* TODO: Use minus/mul/add *)
-		let crossproduct a b c = ((c.(1) - a.(1)) * (b.(0) - a.(0)) - (c.(0) - a.(0)) * (b.(1) - a.(1))) in
-		let dotproduct a b c = ((c.(0) - a.(0)) * (b.(0) - a.(0)) + (c.(1) - a.(1))*(b.(1) - a.(1))) in
-		let squaredlengthba a b = ((b.(0) - a.(0))*(b.(0) - a.(0)) + (b.(1) - a.(1))*(b.(1) - a.(1))) in
-		let squaredlength = squaredlengthba point_a point_b in
-		let crossproduct = crossproduct point_a point_b point_c in
-		let dotproduct = dotproduct point_a point_b point_c in
-		if ((abs crossproduct) > 0) || (dotproduct < 0) || (dotproduct > squaredlength) then 
-			false
-		else true;; *)
-
 	(* Test if two segments intersects *)
 	(* Vector operations - 2D ONLY *)
-	let add_vect vect_a vect_b = [|(vect_a.(0)+vect_b.(0));(vect_a.(1)+vect_b.(1))|];;
-	let minus_vect vect_a vect_b = [|(vect_a.(0)-vect_b.(0));(vect_a.(1)-vect_b.(1))|];;
-	let dot_vect vect_a vect_b = (vect_a.(0)*vect_b.(0))+(vect_a.(1)*vect_b.(1));;
-	let mul_lambda_vect vect_a lambda = [|(vect_a.(0)*lambda);(vect_a.(1)*lambda)|];;
-	let cross_vect vect_a vect_b = (vect_a.(0)*vect_b.(1))-(vect_a.(1)*vect_b.(0));;
+	let add_vect vect_a vect_b = [|(add vect_a.(0) vect_b.(0));(add vect_a.(1) vect_b.(1))|];;
+	let minus_vect vect_a vect_b = [|(minus vect_a.(0) vect_b.(0));(minus vect_a.(1) vect_b.(1))|];;
+	let dot_vect vect_a vect_b = add (mul vect_a.(0) vect_b.(0)) (mul vect_a.(1) vect_b.(1));;
+	let mul_lambda_vect vect_a lambda = [|(mul vect_a.(0) lambda);(mul vect_a.(1) lambda)|];;
+	let cross_vect vect_a vect_b = minus (mul vect_a.(0) vect_b.(1)) (mul vect_a.(1) vect_b.(0));;
 	let lineSegmentsIntersect p p2 q q2 =
+		(* 2D Only function *)
+		if (Array.length p) <> 2 then failwith  "lineSegmentsIntersect: 2D Only";
 		let considerCollinearOverlapAsIntersect = true in
 		let r = minus_vect p2 p in
 		let s = minus_vect q2 q in
@@ -447,14 +403,14 @@ module KDTrees :
 		let qpxr = cross_vect (minus_vect p q) r in
 		let ret = ref false in
 		(* If r x s = 0 and (q - p) x r = 0, then the two lines are collinear. *)
-		(if (rxs = 0) && (qpxr = 0) then
+		(if (is_0 rxs) && (is_0 qpxr) then
 			(* 1. If either  0 <= (q - p) * r <= r * r or 0 <= (p - q) * s <= * s
 				 then the two lines are overlapping *)
 			if considerCollinearOverlapAsIntersect then
 				begin
 				let qpr = (dot_vect (minus_vect q p) r) in
 				let pqs = (dot_vect (minus_vect p q) s) in
-				if ((0 <= qpr && qpr <= (dot_vect r r)) || (0 <=  pqs && pqs <= (dot_vect s s))) then
+				if (((is_pos qpr) && qpr <= (dot_vect r r)) || ((is_pos pqs) && pqs <= (dot_vect s s))) then
 					ret := true
 				else
 					(* 2. If neither 0 <= (q - p) * r = r * r nor 0 <= (p - q) * s <= s * s
@@ -464,17 +420,15 @@ module KDTrees :
 				end);
 		(* 3. If r x s = 0 and (q - p) x r != 0, then the two lines are parallel and non-intersecting. *)
 		(if not !ret then 
-			(if (rxs = 0) && not (qpxr = 0) then
+			(if (is_0 rxs) && not (is_0 qpxr) then
 				ret := false
 			else
-				(let t = (float_of_int (cross_vect (minus_vect q p) s)) /. (float_of_int rxs) in
-				let u = (float_of_int (cross_vect (minus_vect q p) r)) /. (float_of_int rxs) in
-				let float_precision = 0.00000001 in
-				let neg_float_precision = (-0.00000001) in
+				(let t = div ((cross_vect (minus_vect q p) s)) rxs in
+				let u = div ((cross_vect (minus_vect q p) r)) rxs in
 				(* 4. If r x s != 0 and 0 <= t <= 1 and 0 <= u <= 1
 					 the two line segments meet at the point p + t r = q + u s. *)
-				if (not (rxs = 0)) && (neg_float_precision <= t && t <= (1. +. float_precision))
-						&& (neg_float_precision <= u && u <= (1. +. float_precision)) then
+				if (not (is_0 rxs)) && (neg_precision <= t && t <= (add one precision))
+						&& (neg_precision <= u && u <= (add one precision)) then
 					(* An intersection was found. *)
 					ret := true
 				else
@@ -483,10 +437,10 @@ module KDTrees :
 		!ret;;
 
 	let cross_points a d point =
-		let x_vect = [|1;0|] in
-		let x_m_vect = [|-1;0|] in
-		let y_vect = [|0;1|] in
-		let y_m_vect = [|0;-1|] in
+		let x_vect = [|one;zero|] in
+		let x_m_vect = [|minus zero one;zero|] in
+		let y_vect = [|zero;one|] in
+		let y_m_vect = [|zero;minus zero one|] in
 		(lineSegmentsIntersect a d point x_vect) || (lineSegmentsIntersect a d point x_m_vect)
 		|| (lineSegmentsIntersect a d point y_vect) || (lineSegmentsIntersect a d point y_m_vect);;
 
@@ -496,15 +450,10 @@ module KDTrees :
 	let intersect_segment point_a point_b dim tre =
 		(* Tell whether if poin is found *)
 		let found = ref false in
-		let float_precision = 0.00000001 in
 		(* Make vector equation *)
-		let a_init = Array.make dim 0. in
-		let d_init = Array.make dim 0. in
-		let d_int = Array.make dim 0 in
+		let d_init = Array.make dim zero in
 		for i = 0 to (dim-1) do
-			a_init.(i) <- float_of_int point_a.(i);
-			d_init.(i) <- float_of_int (point_b.(i) - point_a.(i));
-			d_int.(i) <- (point_b.(i) - point_a.(i));
+			d_init.(i) <- (minus point_b.(i) point_a.(i));
 		done;
 		let rec intersect_segment_aux a d tmax depth tr = match tr with
 			| EmptyTree -> ()
@@ -513,38 +462,39 @@ module KDTrees :
 				if not !found then
 					begin
 					(* Check if the point if aligned *)
-					if cross_points point_a d_int split_pt then found := true
+					if cross_points point_a d_init split_pt then found := true
 					else
 						begin
 						(* Compute depth for future recursive call *)
 						let new_depth = (depth+1) mod dim in
 						(* Figure out which child to recurse into first (0 = near, 1 = far) *)
-						let split_value = (float_of_int split_pt.(depth)) in
+						let split_value = split_pt.(depth) in
 						let (first,second) = if a.(depth) > split_value then
 																	(right,left) else (left,right) in
 						(* Segment parallel to splitting plane, visit near side only *)
-						if (d.(depth) <= float_precision) && (d.(depth) >= (0. -. float_precision)) then
+						if (is_0 d.(depth)) then
 							intersect_segment_aux a d tmax new_depth first
 						else
 							begin
 							(* Find t value for intersection between segment and split plane *)
-							let t = (split_value -. a.(depth)) /. d.(depth) in
+							let t = div (minus split_value a.(depth)) d.(depth) in
 							(* Test if line segment straddles splitting plane *)
-							if (t >= (0. -. float_precision)) && (t < tmax) then
+							if (is_pos t) && (t < tmax) then
 								begin
 								(* Yes, traverse near side first, then far side *)
 								intersect_segment_aux a d t new_depth first;
 								if not !found then
 									(for i = 0 to (dim-1) do
-										a.(i) <- a.(i) +. (t *. d.(i));
+										a.(i) <- add a.(i) (mul t d.(i));
 									done;
-									intersect_segment_aux a d (tmax -. t) new_depth second;)							end
+									intersect_segment_aux a d (minus tmax t) new_depth second;)
+								end
 							else
 								(*  No, so just traverse near side *)
 								intersect_segment_aux a d tmax new_depth first;
 							end
 						end
 					end in
-		intersect_segment_aux a_init d_init 1. 0 tre;
+		intersect_segment_aux (Array.copy point_a) d_init one 0 tre;
 		!found;;
 	end

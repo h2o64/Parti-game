@@ -6,15 +6,15 @@ module Rect :
 		type 'a rect
 		val get_dim : 'a rect -> int
 		val create : 'a array -> 'a array -> 'a rect
-		val empty : int -> 'a -> 'a rect
-		val reset : int -> 'a -> 'a -> 'a rect
+		val empty : int -> float rect
+		val reset : int -> float rect
 		val validate : 'a rect -> bool
 		val isPoint : 'a rect -> bool
 		val are_equal : 'a rect -> 'a rect -> bool
-		val center : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a array
-		val distanceFromCenter : 'a rect -> 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a -> 'a -> 'a
-		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
-		val dimensionOfMinWidth : 'a rect -> ('a -> 'a -> 'a) -> int
+		val center : float rect -> float array
+		val distanceFromCenter : float rect -> float rect -> float
+		val dimensionOfMinWidth : float rect -> int
+		val dimensionOfMaxWidth : float rect -> int
 		val setMinCorner : 'a rect -> 'a array -> unit
 		val setMaxCorner : 'a rect -> 'a array -> unit
 		val getDimension : 'a rect -> int
@@ -22,19 +22,19 @@ module Rect :
 		val getMaxCorner : 'a rect -> 'a array
 		val copyRect : 'a rect -> 'a rect
 		val closestPoint : 'a rect -> 'a array -> 'a array
- 		val contains_line : int rect -> int array -> int array -> bool
- 		val contains : 'a rect -> 'a array -> bool
+		val contains : 'a rect -> 'a array -> bool
+		val contains_line : float rect -> float array -> float array -> bool
 		val intersection : 'a rect -> 'a rect -> 'a rect
 		val intersectMany : 'a rect list -> 'a rect
 		val intersects : 'a rect -> 'a rect -> bool
-		val overlap : 'a rect -> 'a rect -> 'a -> 'a -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
+		val overlap : float rect -> float rect -> float
 		val stretch : 'a rect -> 'a rect -> unit
-		val volume : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
-		val perimeter : 'a rect -> ('a -> 'a -> 'a) -> ('a -> 'a -> 'a) -> 'a
+		val volume : float rect -> float
+		val perimeter : float rect -> float
 		val union : 'a rect -> 'a rect -> 'a rect
 		val unionMany : 'a rect list -> 'a rect
-		val split : 'a rect -> int -> ('a -> 'a -> 'a) -> 'a -> 'a rect * 'a rect
-		val draw : int rect -> unit
+		val split : float rect -> int -> float rect * float rect
+		val draw : float rect -> unit
 	end =
 	struct
 		(* Structures *)
@@ -51,10 +51,10 @@ module Rect :
 		let create a b = {dim = (Array.length a) ; minCorner = a ; maxCorner = b};;
 
 		(* Create an empty rectangle *)
-		let empty size zero = create (Array.make size zero) (Array.make size zero);;
+		let empty size = create (Array.make size zero) (Array.make size zero);;
 
 		(* Create an empty rectangle *)
-		let reset size biggest lowest = create (Array.make size biggest) (Array.make size lowest);;
+		let reset size = create (Array.make size biggest) (Array.make size lowest);;
 
 		(* Validate a rectangle *)
 		let validate rect =
@@ -89,14 +89,14 @@ module Rect :
 			done;(!i >= rect_a.dim);;
 
 		(* Center of a rectangle *)
-		let center rect add div two =
+		let center rect =
 			let ret = Array.copy rect.minCorner in
 			for i = 0 to (rect.dim-1) do
 				ret.(i) <- div (add rect.minCorner.(i) rect.maxCorner.(i)) two;
 			done;ret;;
 
 		(* Sums the total distances from the center of another rectangle *)
-		let distanceFromCenter rect_a rect_b mul div add zero two =
+		let distanceFromCenter rect_a rect_b =
 			let ret = ref zero in
 			for i = 0 to (rect_a.dim-1) do
 				let t = div (add (add rect_a.minCorner.(i) rect_a.maxCorner.(i)) (add rect_b.minCorner.(i) rect_b.maxCorner.(i))) two in
@@ -105,7 +105,7 @@ module Rect :
 
 		(* Find the index of the dimension having the smallest difference between
 			the minimum vertex and maximum vertex point *)
-		let dimensionOfMinWidth rect minus =
+		let dimensionOfMinWidth rect =
 			let ret = ref 0 in
 			if (rect.dim > 0) then
 				(let minWidth = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
@@ -119,7 +119,7 @@ module Rect :
 
 		(* Find the index of the dimension having the largest difference between
 			the minimum vertex and maximum vertex point *)
-		let dimensionOfMaxWidth rect minus =
+		let dimensionOfMaxWidth rect =
 			let ret = ref 0 in
 			if (rect.dim > 0) then
 				(let minWidth = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
@@ -170,11 +170,11 @@ module Rect :
 			done;!searching;;
 
 		(* Tell if the rectangle contains a segment *)
-		let contains_line rect point_a_i point_b_i =
-			let point_a = [|(float_of_int point_a_i.(0));(float_of_int point_a_i.(1))|] in
-			let point_b = [|(float_of_int point_b_i.(0));(float_of_int point_b_i.(1))|] in
-			let rectMin = [|(float_of_int rect.minCorner.(0));(float_of_int rect.minCorner.(1))|] in
-			let rectMax = [|(float_of_int rect.maxCorner.(0));(float_of_int rect.maxCorner.(1))|] in
+		let contains_line rect point_a point_b =
+			(* 2D-ONLY Function *)
+			if rect.dim <> 2 then failwith "contains_line: 2D Only";
+			let rectMin = rect.minCorner in
+			let rectMax = rect.maxCorner in
 			let min_x = ref (min point_a.(0) point_b.(0)) in
 			let max_x = ref (max point_a.(0) point_b.(0)) in
 			if !max_x > rectMax.(0) then max_x := rectMax.(0);
@@ -183,12 +183,12 @@ module Rect :
 			else
 				(let min_y = ref point_a.(1) in
 				let max_y = ref point_b.(1) in
-				let dx = (point_b.(0) -. point_a.(0)) in
-				if (abs_float dx) > 0.0000001 then
-					(let a = (point_b.(1) -. point_a.(1)) /. dx in
-					let b = point_a.(1) -. (a *. point_a.(0)) in
-					min_y := a *. !min_x +. b;
-					max_y := a *. !max_x +. b;);
+				let dx = (minus point_b.(0) point_a.(0)) in
+				if (abs_f dx) > precision then
+					(let a = div (minus point_b.(1) point_a.(1)) dx in
+					let b = minus point_a.(1) (mul a point_a.(0)) in
+					min_y := add (mul a !min_x) b;
+					max_y := add (mul a !max_x) b;);
 				if (!min_y > !max_y) then
 					(let tmp = !max_y in
 					max_y := !min_y;
@@ -229,10 +229,10 @@ module Rect :
 			done;!intersect;;
 
 		(* Overlap *)
-		let overlap rect_a rect_b zero one minus mul =
+		let overlap rect_a rect_b =
 			let area = ref one in
 			let axis = ref 0 in
-			while (!area <> zero) && (!axis < rect_a.dim) do
+			while (is_0 !area) && (!axis < rect_a.dim) do
 				let x1 = rect_a.minCorner.(!axis) in
 				let x2 = rect_a.maxCorner.(!axis) in
 				let y1 = rect_b.minCorner.(!axis) in
@@ -264,14 +264,14 @@ module Rect :
 			done;;
 
 		(* Find the volume of an hyper-rectangle *)
-		let volume rect minus mul =
+		let volume rect =
 			let ret = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
 			for i = 1 to (rect.dim-1) do
 				ret := mul !ret (minus rect.maxCorner.(i) rect.minCorner.(i));
 			done;!ret;;
 
 		(* Find the perimeter of an hyper-rectangle *)
-		let perimeter rect minus add =
+		let perimeter rect =
 			let ret = ref (minus rect.maxCorner.(0) rect.minCorner.(0)) in
 			for i = 1 to (rect.dim-1) do
 				ret := add !ret (minus rect.maxCorner.(i) rect.minCorner.(i));
@@ -293,7 +293,7 @@ module Rect :
 			unionMany_aux rects (List.hd rects);;
 
 		(* Split a rectangle in half in a specific axis *)
-		let split rect m div two =
+		let split rect m =
 			let left_rect = copyRect rect in
 			let right_rect = copyRect rect in
 			left_rect.maxCorner.(m) <- div rect.maxCorner.(m) two;
@@ -302,10 +302,11 @@ module Rect :
 
 		(* Draw a 2D rectangle *)
 		let draw rect =
+			if rect.dim <> 2 then failwith "draw: 2D Only";
 			let polygon = [|(0,0);(0,0);(0,0);(0,0)|] in
-			polygon.(0) <- (rect.minCorner.(0),rect.minCorner.(1));
-			polygon.(1) <- (rect.maxCorner.(0),rect.minCorner.(1));
-			polygon.(2) <- (rect.maxCorner.(0),rect.maxCorner.(1));
-			polygon.(3) <- (rect.minCorner.(0),rect.maxCorner.(1));
+			polygon.(0) <- (to_int rect.minCorner.(0),to_int rect.minCorner.(1));
+			polygon.(1) <- (to_int rect.maxCorner.(0),to_int rect.minCorner.(1));
+			polygon.(2) <- (to_int rect.maxCorner.(0),to_int rect.maxCorner.(1));
+			polygon.(3) <- (to_int rect.minCorner.(0),to_int rect.maxCorner.(1));
 			Graphics.draw_poly polygon;;
 	end

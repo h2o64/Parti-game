@@ -1,33 +1,24 @@
 module RTree :
 	sig
-		type ('a, 'b) bounded_item = {
-		  mutable bb : 'a Rect.rect;
-		  mutable item : 'b;
-		}
-		type ('a, 'b) leaf_data = { pos : 'a array; data : 'b; }
-		type ('a, 'b) leaf = ('a, ('a, 'b) leaf_data) bounded_item
-		type 'a node_data = { mutable nodes : 'a list; mutable hasLeaves : bool; }
-		type ('a, 'b) node = ('a, 'b node_data) bounded_item
-		type ('a, 'b) tree_struct =
-		    Node of ('a, ('a, 'b) tree_struct) node
-		  | Leaf of ('a, 'b) leaf
-		  | Empty
-		type ('a, 'b) tree = {
-		  mutable root : ('a, 'b) tree_struct;
-		  mutable size : int;
-		  dimensions : int;
-		}
+		type ('a, 'b) bounded_item
+		type ('a, 'b) leaf_data
+		type ('a, 'b) leaf
+		type 'a node_data
+		type ('a, 'b) node
+		type ('a, 'b) tree_struct
+		type ('a, 'b) tree
 		val empty_tree : int -> ('a, 'b) tree
-		val insert : (int, 'a) tree -> int Rect.rect -> (int, 'a) leaf_data -> unit
-		val grid : int array -> int -> (int, int) tree * int array array * (int * int list) list
-		val draw_tree : (int, 'a) tree -> unit
-		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
+		val insert :(float, 'a) tree -> float Rect.rect -> (float, 'a) leaf_data -> unit
 		val search_point : 'a array -> ('a, 'b) tree -> bool
-		val find_point : int array -> (int, 'a) tree -> (int, 'a) tree_struct
-		val find_segment : int array -> int array -> (int, 'a) tree -> (int, 'a) tree_struct list
+		val find_rect : 'a Rect.rect -> ('a, 'b) tree_struct -> ('a, 'b) leaf list
+		val find_segment :float array -> float array -> (float, 'a) tree -> (float, 'a) tree_struct list
+		val find_point : float array -> (float, 'a) tree -> (float, 'a) tree_struct
+		val grid :int array -> int -> (float, int) tree * float array array * (int * int list) list
+		val draw_tree : (float, 'a) tree -> unit
+		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split_node : (int, 'a) tree_struct -> int -> int -> (int, int) tree -> int array * int array
+		val split_node :(float, 'a) tree_struct ->  int -> int -> (float, int) tree -> float array * float array
 	end =
 	struct
 		(* Parameters *)
@@ -35,19 +26,6 @@ module RTree :
 		let rtree_choose_subtree_p = 32;;
 		let min_child_items = 32;;
 		let max_child_items = 64;;
-
-		(* Operations *)
-		let add = (+);;
-		let minus = (-);;
-		let mul = ( * );;
-		let div = (/);;
-		let abs_f = abs;;
-		let biggest = max_int;;
-		let lowest = min_int;;
-		let zero = 0;;
-		let one = 1;;
-		let two = 2;;
-		let four = 4;;
 
 		(* Define a tree *)
 		type 'a point = 'a array;;
@@ -126,7 +104,7 @@ module RTree :
 		(* Sort items by area enlargement *)
 		let partial_sort_by_area_enlargement target_volume l =
 			let enlargement rect =
-				(minus target_volume (Rect.volume rect minus mul)) in
+				(minus target_volume (Rect.volume rect)) in
 			let items = List.map (fun x -> ((enlargement (assert_both_bb x)),x)) l in
 			List.map snd (List.fast_sort compare items);;
 
@@ -138,12 +116,12 @@ module RTree :
 				else min_list func t (cur_v,cur)
 			| [] -> cur;;
 		let sort_by_area_enlargement target_volume l =
-			let enlargement rect = (minus target_volume (Rect.volume rect minus mul)) in
+			let enlargement rect = (minus target_volume (Rect.volume rect)) in
 			let first = List.hd l in
 			let ret = (min_list enlargement (List.tl l) ((enlargement (assert_both_bb first)),first)) in
 			ret;;
 		let sort_by_overlap_enlargement bb_e l =
-			let overlap rect = Rect.overlap rect bb_e zero one minus mul in
+			let overlap rect = Rect.overlap rect bb_e in
 			let first = List.hd l in
 			let ret = (min_list overlap (List.tl l) (overlap (assert_both_bb first),first)) in
 			ret;;
@@ -153,7 +131,7 @@ module RTree :
 			(* Assertion *)
 			let n = assert_node node in
 			(* bb_e volume *)
-			let target_volume = (Rect.volume bb_e minus mul) in
+			let target_volume = (Rect.volume bb_e) in
 			(* Returned thing *)
 			let ret = ref None in
 			(* If the child poiunts in t points to leaves *)
@@ -230,7 +208,7 @@ module RTree :
 			(* Assertition *)
 			let node = assert_node node_t in
 			let dimensions = Rect.getDimension node.bb in 
-			let newNode = { bb = (Rect.reset dimensions biggest lowest) ; item = {nodes = [] ; hasLeaves = node.item.hasLeaves } } in
+			let newNode = { bb = (Rect.reset dimensions) ; item = {nodes = [] ; hasLeaves = node.item.hasLeaves } } in
 			(* Variables *)
 			let n_items = List.length node.item.nodes in
 			let distribution_count = (n_items - 2 * min_child_items + 1) in
@@ -272,14 +250,14 @@ module RTree :
 					for k = 0 to (distribution_count-1) do
 						let area = ref zero in
 						(* Calculate box for R1 and R2 *)
-						(let r1 = (Rect.reset dimensions biggest lowest) in
-						let r2 = (Rect.reset dimensions biggest lowest) in
+						(let r1 = (Rect.reset dimensions) in
+						let r2 = (Rect.reset dimensions) in
 						distribution_box r1 0 (min_child_items+k-1) 0 !sorted_edg;
 						distribution_box r2 (min_child_items+k+1) n_items 0 !sorted_edg;
 						(* Calculate the three values *)
-						margin := add !margin (add (Rect.perimeter r1 minus add) (Rect.perimeter r2 minus add));
-						area := add !area (add (Rect.volume r1 minus mul) (Rect.volume r2 minus mul));
-						overlap := Rect.overlap r1 r2 zero one minus mul;
+						margin := add !margin (add (Rect.perimeter r1) (Rect.perimeter r2));
+						area := add !area (add (Rect.volume r1) (Rect.volume r2));
+						overlap := Rect.overlap r1 r2;
 						(* Along the split axis, choose the distribution with the 
 							 minimum overlap-value. Resolve ties by choosing the distribution
 							 with minimum area-value. *)
@@ -307,9 +285,9 @@ module RTree :
 			newNode.item.nodes<-((list_extract !split_index n_items 0 [] final_sort true));
 			node.item.nodes<-((list_extract 0 (!split_index-1) 0 [] final_sort false));
 			(* Adjust the bounding box for each 'new' node *)
-			newNode.bb<-(Rect.reset dimensions biggest lowest);
+			newNode.bb<-(Rect.reset dimensions);
 			distribution_box newNode.bb 0 (n_items - !split_index+1) 0 newNode.item.nodes;
-			node.bb<-(Rect.reset dimensions biggest lowest);
+			node.bb<-(Rect.reset dimensions);
 			distribution_box node.bb 0 (!split_index+1) 0 node.item.nodes;
 			(Node newNode));;
 
@@ -330,14 +308,14 @@ module RTree :
 			(* Sort the items in increasing order of their distances *)
 			let compare_dist node_a_t node_b_t =
 				let (rect_a,rect_b) = ((assert_both_bb node_a_t),(assert_both_bb node_b_t)) in
-				compare (Rect.distanceFromCenter rect_a node.bb mul div add zero two)
-								(Rect.distanceFromCenter rect_b node.bb mul div add zero two) in
+				compare (Rect.distanceFromCenter rect_a node.bb)
+								(Rect.distanceFromCenter rect_b node.bb) in
 			let sorted_list = List.fast_sort compare_dist node.item.nodes in
 			(* Remove the last p items from N *)
 			let removed_items = List.rev (list_extract (n_items-p) (n_items+1) 0 [] sorted_list true) in
 			node.item.nodes<-List.rev (list_extract 0 (n_items-p-1) 0 [] sorted_list false); (* WARNING: Important rev *)
 			(* Adjust the bounding rectangle of N *)
-			node.bb<-(Rect.reset dimensions biggest lowest);
+			node.bb<-(Rect.reset dimensions);
 			distribution_box node.bb 0 (n_items-p+1) 0 node.item.nodes;
 			(* In the sort, defined previously, starting with the 
 				 minimum distance (= close reinsert), invoke Insert 
@@ -498,12 +476,12 @@ module RTree :
 			else
 				(let init_nd = (ExtList.List.hd point_list) in
 				let init_rect = (assert_both_bb init_nd) in
-				let ret_area = ref (Rect.volume init_rect minus mul) in
+				let ret_area = ref (Rect.volume init_rect) in
 				let ret = ref init_nd in
 				(* Choose the minimum *)
 				let rec find_point_aux l = match l with
 					| nd::q ->
-						let vol = Rect.volume (assert_both_bb nd) minus mul in
+						let vol = Rect.volume (assert_both_bb nd) in
 						if vol < !ret_area then
 							(ret_area := vol;
 							ret := nd);
@@ -519,7 +497,7 @@ module RTree :
 			while (!i < (sizes.(0)-resolution)) do
 				let j = ref 0 in
 				while (!j < (sizes.(1)-resolution)) do
-					ret := [!i;!j]::!ret;
+					ret := [of_int !i;of_int !j]::!ret;
 					j := !j + resolution;
 				done;
 				i := !i + resolution;
@@ -534,7 +512,7 @@ module RTree :
 				while (!j < (sizes.(1)-resolution)) do
 					let h = ref 0 in
 					while (!h < (sizes.(2)-resolution)) do
-						ret := [!i;!j;!h]::!ret;
+						ret := [(of_int !i);(of_int !j);(of_int !h)]::!ret;
 						h := !h + resolution;
 					done;
 					j := !j + resolution;
@@ -559,7 +537,7 @@ module RTree :
 				(* Get all the low points *)
 				let rec make_possibilities i start =
 					if (start*resolution) >= (sizes.(i)-resolution+1) then []
-					else (start*resolution)::(make_possibilities i (start+1)) in
+					else (of_int (start*resolution))::(make_possibilities i (start+1)) in
 				let rec concat_everything vect_list poss = match vect_list with
 					| h::t -> ExtList.List.append (vector_concat h poss) (concat_everything t poss)
 					| [] -> [] in
@@ -575,8 +553,8 @@ module RTree :
 			let rec rect_grid_aux l count = match l with
 				| h::t ->
 					let vect = Array.of_list h in
-					let cur_rect = Rect.create vect (Array.map (fun x -> x+resolution) vect) in
-					let center = (Rect.center cur_rect add div two) in
+					let cur_rect = Rect.create vect (Array.map (fun x -> add x (of_int resolution)) vect) in
+					let center = (Rect.center cur_rect) in
 					(cur_rect,center,count)::(rect_grid_aux t (count+1))
 				| [] -> [] in
 			(rect_grid_aux (all_points sizes resolution) 0);;
@@ -589,7 +567,7 @@ module RTree :
 				let fail = ref false in
 				let aligned = ref false in
 				while (!i < dim) && (not !fail) do
-					fail := ((abs (point_a.(!i) - point_b.(!i))) > resolution);
+					fail := ((abs_f (minus point_a.(!i) point_b.(!i))) > (of_int resolution));
 					aligned := (point_a.(!i) = point_b.(!i)) || !aligned;
 					i := !i + 1;
 				done;
@@ -599,11 +577,11 @@ module RTree :
 			(* Make a neigboorhood from the mega rect intersection *)
 			let rec make_nei_aux l = match l with
 				| (_,p,count)::q ->
-					let mega_min = Array.map (fun x -> x-(resolution/2)) p in
-					let mega_max = Array.map (fun x -> x+resolution+(resolution/2)) p in
+					let mega_min = Array.map (fun x -> (minus x (of_int (resolution/2)))) p in
+					let mega_max = Array.map (fun x -> (add x (of_int (resolution+(resolution/2))))) p in
 					let mega_rect = Rect.create mega_min mega_max in
 					let candidates = find_rect mega_rect t in
-					if candidates = [] then failwith "HERE";
+					if candidates = [] then failwith "make_nei_aux: No more candidates";
 					let results = List.filter (check_centers p count) candidates in
 					(count,(List.map (fun x -> x.item.data) results))::(make_nei_aux q)
 				| [] -> [] in
@@ -627,41 +605,19 @@ module RTree :
 			let nei = make_nei origins resolution dim ret_tree.root in
 			(ret_tree,numerals,nei);;
 
-		(* Create a random tree *)
-		let cur_arr = ref [];;
-		let random_tree height width count =
-			let indexes = ref [] in
-			(* Contruction *)
-			for i = 1 to count do
-					let (x,y) = (Random.int height),(Random.int width) in
-					let cur_rect = Rect.create [|x;y|] [|x + (Random.int (height / 10));
-																							 y + (Random.int (width / 10))|] in
-					let center = (Rect.center cur_rect add div two) in
-					indexes := (cur_rect,{pos = center ; data = i})::!indexes;
-			done;
-			cur_arr := !indexes;
-			(* Build the tree *)
-			let ret_tree = { root = Empty ; size = 0 ; dimensions = 2 } in
-			let rec build_tree l = match l with
-				| (r,idx)::t -> insert ret_tree r idx; build_tree t
-				| [] -> () in
-			build_tree (List.rev !indexes);
-			ret_tree;;
-
 		(* Guttman example tree *)
 		let guttman scaling =
 			let tr = { root = Empty ; size = 0 ; dimensions = 2 } in
-			insert tr (Rect.create [|1*scaling;5*scaling|] [|4*scaling;7*scaling|]) { pos = [||] ; data = "R8"};
-			insert tr (Rect.create [|6*scaling;1*scaling|] [|8*scaling;3*scaling|]) { pos = [||] ; data = "R9"};
-			insert tr (Rect.create [|6*scaling;4*scaling|] [|8*scaling;6*scaling|]) { pos = [||] ; data = "R10"};
-			insert tr (Rect.create [|9*scaling;0*scaling|] [|11*scaling;14*scaling|]) { pos = [||] ; data = "R11"};
-			insert tr (Rect.create [|13*scaling;1*scaling|] [|14*scaling;10*scaling|]) { pos = [||] ; data = "R13"};
-			insert tr (Rect.create [|12*scaling;5*scaling|] [|14*scaling;7*scaling|]) { pos = [||] ; data = "R14"};
-			insert tr (Rect.create [|0*scaling;16*scaling|] [|2*scaling;18*scaling|]) { pos = [||] ; data = "R15"};
-			insert tr (Rect.create [|3*scaling;11*scaling|] [|9*scaling;18*scaling|]) { pos = [||] ; data = "R16"};
-			insert tr (Rect.create [|14*scaling;10*scaling|] [|21*scaling;14*scaling|]) { pos = [||] ; data = "R17"};
-			insert tr (Rect.create [|16*scaling;8*scaling|] [|18*scaling;17*scaling|]) { pos = [||] ; data = "R18"};
-			insert tr (Rect.create [|17*scaling;12*scaling|] [|20*scaling;15*scaling|]) { pos = [||] ; data = "R19"};
+			insert tr (Rect.create [|1.*.scaling;5.*.scaling|] [|4.*.scaling;7.*.scaling|]) { pos = [||] ; data = "R8"};
+			insert tr (Rect.create [|6.*.scaling;1.*.scaling|] [|8.*.scaling;3.*.scaling|]) { pos = [||] ; data = "R9"};
+			insert tr (Rect.create [|6.*.scaling;4.*.scaling|] [|8.*.scaling;6.*.scaling|]) { pos = [||] ; data = "R10"};
+			insert tr (Rect.create [|9.*.scaling;0.*.scaling|] [|11.*.scaling;14.*.scaling|]) { pos = [||] ; data = "R11"};
+			insert tr (Rect.create [|13.*.scaling;1.*.scaling|] [|14.*.scaling;10.*.scaling|]) { pos = [||] ; data = "R13"};
+			insert tr (Rect.create [|12.*.scaling;5.*.scaling|] [|14.*.scaling;7.*.scaling|]) { pos = [||] ; data = "R15"};
+			insert tr (Rect.create [|3.*.scaling;11.*.scaling|] [|9.*.scaling;18.*.scaling|]) { pos = [||] ; data = "R16"};
+			insert tr (Rect.create [|14.*.scaling;10.*.scaling|] [|21.*.scaling;14.*.scaling|]) { pos = [||] ; data = "R17"};
+			insert tr (Rect.create [|16.*.scaling;8.*.scaling|] [|18.*.scaling;17.*.scaling|]) { pos = [||] ; data = "R18"};
+			insert tr (Rect.create [|17.*.scaling;12.*.scaling|] [|20.*.scaling;15.*.scaling|]) { pos = [||] ; data = "R19"};
 			tr;;
 
 		(* Draw tree *)
@@ -697,10 +653,10 @@ module RTree :
 
 		(* Split a node *)
 		let split_node node axis count t =
-			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis div two in
-			let (center1,center2) = ((Rect.center rect1 add div two),((Rect.center rect2 add div two))) in
-			insert t rect1 {pos = (Rect.center rect1 add div two) ; data = count + 1};
-			insert t rect2 {pos = (Rect.center rect2 add div two) ; data = count + 2};
+			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis in
+			let (center1,center2) = ((Rect.center rect1),((Rect.center rect2))) in
+			insert t rect1 {pos = (Rect.center rect1) ; data = count + 1};
+			insert t rect2 {pos = (Rect.center rect2) ; data = count + 2};
 			(center1,center2);;
 
 		(* Benchmarks *)
@@ -718,7 +674,7 @@ module RTree :
 				print_string " | It took ";
 				let start = Unix.gettimeofday () in
 				for j = 0 to (500*i) do
-					match (find_point [|(Random.int 2500);(Random.int 2500)|] tr) with _ -> ();
+					match (find_point [|(Random.float 2500.);(Random.float 2500.)|] tr) with _ -> ();
 				done;
 				let stop = Unix.gettimeofday () in
 				print_float (stop -. start);
@@ -732,8 +688,8 @@ module RTree :
 				print_string " | It took ";
 				let start = Unix.gettimeofday () in
 				for j = 0 to (500*i) do
-					let r1 = [|(Random.int 2500);(Random.int 2500)|] in
-					let r2 = [|(Random.int 2500);(Random.int 2500)|] in
+					let r1 = [|(Random.float 2500.);(Random.float 2500.)|] in
+					let r2 = [|(Random.float 2500.);(Random.float 2500.)|] in
 					insert tr (Rect.create r1 r2) { pos = r1 ; data = j };
 				done;
 				let stop = Unix.gettimeofday () in
@@ -748,7 +704,7 @@ module RTree :
 				print_string " | It took ";
 				let total_time = ref 0. in
 				for j = 0 to (500*i) do
-					let nd = (find_point [|(Random.int 700);(Random.int 700)|] tr) in
+					let nd = (find_point [|(Random.float 700.);(Random.float 700.)|] tr) in
 					let start = Unix.gettimeofday () in
 					match (split_node nd (Random.int 2) j tr) with _ -> ();
 					let stop = Unix.gettimeofday () in

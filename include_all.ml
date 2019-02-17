@@ -1,4 +1,5 @@
 #load "graphics.cma";;
+#use "Operations.ml";;
 #use "Image_magick.ml"
 #use "KDTrees.ml";;
 #use "PriorityQueue.ml";;

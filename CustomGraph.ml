@@ -1,29 +1,30 @@
 module CustomGraph :
   sig
-	type 'a edge
-	type ('a, 'b, 'c) info
-	type ('a, 'b, 'c) graph
-	val tuple_of_edge : 'a edge -> int * 'a
-	val get_dim : ('a, 'b, 'c) graph -> int
-	val create_graph : int array -> int -> (unit -> 'a) -> int -> (int, int, 'a) graph
-	val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
-	val nei : ('a, 'b, 'c) graph -> int -> int -> 'b edge list
-	val nei_n : ('a, 'b, 'c) graph -> int -> int -> int list
-	val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b
-	val set_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
-	val add_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
-	val add_bunch_edg : ('a, 'b, 'c) graph -> int -> 'b edge list -> int -> unit
-	val rmv_edg : ('a, 'b, 'c) graph -> int -> int -> int -> unit
-	val add_pt : (int, 'a, 'b) graph -> int array -> int Rect.rect -> (unit -> 'b) -> unit
-	val get_node : ('a, 'b, 'c) graph -> int -> 'c
-	val get_point : ('a, 'b, 'c) graph -> int -> 'a array
-	val set_node : ('a, 'b, 'c) graph -> int -> 'c -> unit
-	val find_node : (int, 'a, 'b) graph -> int array -> int
-	val bfs : ('a, 'b, int array) graph -> int -> int -> unit
-	val dijkstra : ('a, int, int array) graph -> int -> int -> unit
-	val compute_path : ('a, 'b, int array) graph -> int -> int -> int list
-	val shortest_path_bfs : ('a, 'b, int array) graph -> int -> int -> int -> int list * int
-	val shortest_path_dijkstra : ('a, int, int array) graph -> int -> int -> int -> int list * int
+		type 'a edge
+		type ('a, 'b, 'c) info
+		type ('a, 'b, 'c) graph
+		val tuple_of_edge : 'a edge -> int * 'a
+		val edge_of_tuple : int * int -> int edge
+		val get_dim : ('a, 'b, 'c) graph -> int
+		val create_graph : int array -> int -> (unit -> 'a) -> int -> (float, int, 'a) graph
+		val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
+		val nei : ('a, 'b, 'c) graph -> int -> int -> 'b edge list
+		val nei_n : ('a, 'b, 'c) graph -> int -> int -> int list
+		val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b
+		val set_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
+		val add_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
+		val add_bunch_edg : ('a, 'b, 'c) graph -> int -> 'b edge list -> int -> unit
+		val rmv_edg : ('a, 'b, 'c) graph -> int -> int -> int -> unit
+		val add_pt : (float, 'a, 'b) graph -> float array -> float Rect.rect -> (unit -> 'b) -> unit
+		val get_node : ('a, 'b, 'c) graph -> int -> 'c
+		val get_point : ('a, 'b, 'c) graph -> int -> 'a array
+		val set_node : ('a, 'b, 'c) graph -> int -> 'c -> unit
+		val find_node : (float, 'a, 'b) graph -> float array -> int
+		val bfs : ('a, 'b, int array) graph -> int -> int -> unit
+		val dijkstra : ('a, int, int array) graph -> int -> int -> unit
+		val compute_path : ('a, 'b, int array) graph -> int -> int -> int list
+		val shortest_path_bfs : ('a, 'b, int array) graph -> int -> int -> int -> int list * int
+		val shortest_path_dijkstra : ('a, int, int array) graph -> int -> int -> int -> int list * int
   end =
   struct
 		(* Structures *)
@@ -290,5 +291,4 @@ module CustomGraph :
 		let shortest_path_dijkstra g u v m =
 			dijkstra g u m;
 			(compute_path g u v, (get_node g v).(2));;
-
 	end
