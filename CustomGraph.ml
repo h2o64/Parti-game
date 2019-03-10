@@ -6,6 +6,7 @@ module CustomGraph :
 		val tuple_of_edge : 'a edge -> int * 'a
 		val edge_of_tuple : int * int -> int edge
 		val get_dim : ('a, 'b, 'c) graph -> int
+		val get_count : ('a, 'b, 'c) graph -> int
 		val create_graph : int array -> int -> (unit -> 'a) -> int -> (float, int, 'a) graph
 		val draw_graph : (float, 'a, 'b) graph -> unit
 		val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
