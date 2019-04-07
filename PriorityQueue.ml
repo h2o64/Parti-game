@@ -1,223 +1,149 @@
-(* Files de priorité min *)
-(* Marc Lorenzi *)
-(* Février 2018 *)
-
-exception Empty_Queue;;
-exception Full_Queue;;
-
 module PriorityQueue :
   sig
+    type 'a order = 'a -> 'a -> bool
     type 'a t
-    val reset_stats : unit -> unit
-    val get_stats : unit -> int * int * int
-    val create : int -> 'a -> 'a t
-    val is_empty : 'a t -> bool
-    val is_in : 'a -> 'a t -> bool
-    val top : 'a t -> 'a * int
-    val pop : 'a t -> 'a * int
-    val push : 'a * int -> 'a t -> unit
-    val decrease_prio : 'a * int -> 'a t -> unit
+    val make: 'a order -> 'a t
+    val length: 'a t -> int
+    val is_empty: 'a t -> bool
+    val add: 'a t -> 'a -> unit
+    val mem: 'a t -> 'a -> bool
+    val first: 'a t -> 'a
+    val remove_first: 'a t -> unit
+    val remove: 'a t -> 'a -> unit
+    val clear: 'a t -> unit
+    val reorder_up: 'a t -> 'a -> unit
+    val reorder_down: 'a t -> 'a -> unit
   end =
+
   struct
-		type 'a t = {
-				maxsize : int;
-				mutable size : int;
-				data : 'a array;
-				prio : int array;
-				index : ('a, int) Hashtbl.t 
-		};;
+    type 'a order = 'a -> 'a -> bool
 
-		(* -------------------------------------------- *)
-		(* Statistiques sur l'utilisation des files *)
+    type 'a queue = {
+      heap:    'a LocalDynArray.t;
+      indices: ('a, int) Hashtbl.t;
+      order:   'a order;
+    }
 
-		type stat = {
-				mutable nbpush : int;
-				mutable nbpop : int;
-				mutable bigsize : int
-		};;
+    type 'a t = 'a queue
 
-		let global_stat = {
-				nbpush = 0;
-				nbpop = 0;
-				bigsize = 0
-		};;
+    let make order = {
+      heap    = LocalDynArray.make 0 (Obj.magic 0);
+      indices = Hashtbl.create 32;
+      order   = order;
+    }
 
-		let reset_stats () =
-				global_stat.nbpush <- 0;
-				global_stat.nbpop <- 0;
-				global_stat.bigsize <- 0;;
+    let length h =
+      LocalDynArray.length h.heap
 
-		let get_stats () =
-				(global_stat.nbpush, global_stat.nbpop, global_stat.bigsize);;
+    let is_empty h =
+      length h = 0
 
-		(* Crée une nouvelle file de taille maximale n *)
+    let get h =
+      LocalDynArray.unsafe_get h.heap
 
-		let create n init = {
-				maxsize = n;
-				size = 0;
-				data = Array.make n init;
-				prio = Array.make n 0;
-				index = Hashtbl.create ~random:false 128
-		};;
+    let set h i x =
+      LocalDynArray.unsafe_set h.heap i x;
+      Hashtbl.replace h.indices x i
 
-		(* La file est-elle vide ? *)
-		let is_empty f = f.size = 0;;
+    let mem h x =
+      Hashtbl.mem h.indices x
 
-		(* l'objet x est-il dans la file f ? *)
-		let is_in x f =
-				try
-				    let _ = Hashtbl.find f.index x in true
-				with
-				    Not_found -> false;;
+    let parent i = (i - 1) / 2
+    let left i   = 2 * i + 1
+    let right i  = 2 * i + 2
 
-		(* index de l'objet x dans la file f *)
-		let index_of x f =
-				try
-				    Hashtbl.find f.index x
-				with
-				    Not_found -> raise Not_found;;
+    let has_left h i =
+      left i < length h
 
+    let has_right h i =
+      right i < length h
 
-		(* Taille de la file f *)
+    let is_heap h =
+      let ord = h.order in
+      let rec is_heap i =
+           (not (has_left h i) ||
+              (ord (get h i) (get h (left i)) && is_heap (left i)))
+        && (not (has_right h i) ||
+              (ord (get h i) (get h (right i)) && is_heap (right i)))
+      in
+        is_heap 0
 
-		let length f = f.size;;
+    let down_heap h i =
+      let x = get h i in
+      let ord = h.order in
+      let rec down_heap j =
+        if has_left h j then
+          let l = left j in
+          let r = right j in
+          let k =
+            if has_right h j && not (ord (get h l) (get h r)) then r else l in
+          let y = get h k in
+            if ord x y then
+              set h j x
+            else begin
+              set h j y;
+              down_heap k
+            end
+        else if j <> i then
+          set h j x
+      in
+        down_heap i
 
-		(* Echange les éléents d'indices i et j dans le tableau t *)
+    let up_heap h i =
+      let x = get h i in
+      let ord = h.order in
+      let rec up_heap j =
+        let k = parent j in
+        let y = get h k in
+          if j = 0 || ord y x then
+            set h j x
+          else begin
+            set h j y;
+            up_heap k
+          end
+      in
+        up_heap i
 
-		let exchange_array t i j =
-				let tmp = t.(i) in
-				t.(i) <- t.(j);
-				t.(j) <- tmp;;
+    let make_heap h =
+      for i = (length h) / 2 - 1 downto 0 do
+        down_heap h i
+      done
 
-		(* Echange les éléments d'indices x et y dans la table t *)
+    let first h =
+      if is_empty h then failwith "PriorityQueue.first: empty queue"
+      else get h 0
 
-		let exchange_hash t x y =
-				let i = Hashtbl.find t x
-				and j = Hashtbl.find t y in
-				Hashtbl.replace t x j;
-				Hashtbl.replace t y i;;
-		 
-		(* Echange les éléments d'indices i et j dans la file f *)
+    let add h x =
+      let i = length h in
+        LocalDynArray.add h.heap x ;
+        Hashtbl.add h.indices x i;
+        up_heap h i
 
-		let exchange f i j =
-				exchange_array f.data i j;
-				exchange_array f.prio i j;
-				exchange_hash f.index f.data.(i) f.data.(j);;
+    let remove_index h i =
+      let x = get h i in
+      let y = get h (length h - 1) in
+        set h i y;
+        LocalDynArray.remove_last h.heap;
+        Hashtbl.remove h.indices x;
+        down_heap h i
 
-		(* Elément de priorité minimale dans la file f *)
+    let remove_first h =
+      if is_empty h then failwith "PriorityQueue.first: empty queue"
+      else remove_index h 0
 
-		let top f = 
-				if f.size > 0 then    
-				    (f.data.(0), f.prio.(0))
-				else raise Empty_Queue;;
+    let remove h x =
+      try remove_index h (Hashtbl.find h.indices x)
+      with Not_found -> ()
 
-		(* père, fils gauche, fils droit *)
+    let clear h =
+      LocalDynArray.clear h.heap;
+      Hashtbl.clear h.indices
 
-		let father k = (k - 1) / 2;;
-		let left k = 2 * k + 1;;
-		let right k = 2 * k + 2;;
+    let reorder_up h x =
+      try up_heap h (Hashtbl.find h.indices x)
+      with Not_found -> ()
 
-		(* Mettre à la bonne position dans la file un élément dont la
-		priorité risque d'être plus grande que celle de l'un de ses fils *)
-
-		let rec bubble_down f k =
-				let m = ref k in
-				if left k < f.size && f.prio.(left k) < f.prio.(k) then
-				    m := left k;
-				if right k < f.size && f.prio.(right k) < f.prio.(!m) then
-				    m := right k;
-				if !m <> k then (
-				    exchange f !m k;
-				    bubble_down f !m
-				);;
-			
-		(* Mettre à la bonne position dans la file un élément dont la
-		priorité risque d'être plus petite que celle de son père *)
-
-		let rec bubble_up f k =
-				let m = ref k in
-				if !m > 0 && f.prio.(father !m) > f.prio.(!m) then 
-				    m := father k;
-				if k <> !m then (
-				    exchange f k !m;
-				    bubble_up f !m
-				);;
-
-		(* Déplacer dans la file f l'élément d'indice i vers l'indice j *)
-
-		let move f i j =
-				if i <> j then (
-				    Hashtbl.remove f.index f.data.(j);
-				    f.data.(j) <- f.data.(i);
-				    f.prio.(j) <- f.prio.(i);
-				    Hashtbl.replace f.index f.data.(j) j
-				);;
-
-		(* Supprime de la file f l'élément de priorité minimale.
-		Renvoie cet élement ainsi que sa priorité *)
-
-		let pop f =
-				global_stat.nbpop <- global_stat.nbpop + 1;
-				if f.size = 0 then raise Empty_Queue
-				else
-				    let x = f.data.(0)
-				    and p = f.prio.(0) in
-				    if f.size > 1 then (
-				        move f (f.size - 1) 0;
-				        f.size <- f.size - 1;
-				        bubble_down f 0
-				    )
-				    else (
-				        f.size <- 0;
-				        Hashtbl.remove f.index x
-				    );
-				    (x, p);;
-
-		(* Ajoute à f l'objet x de priorité p *)
-
-		let push (x, p) f =
-				global_stat.nbpush <- global_stat.nbpush + 1;
-				if f.size = f.maxsize then raise Full_Queue
-				else (
-				    f.size <- f.size + 1;
-				    if f.size > global_stat.bigsize then global_stat.bigsize <- f.size;       
-				    f.data.(f.size - 1) <- x;
-				    f.prio.(f.size - 1) <- p;
-				    Hashtbl.replace f.index x (f.size - 1);
-				    bubble_up f (f.size - 1)
-				);;
-
-		(* Diminue la priorité de l'objet x à la valeur p *)       
-		(* Ne fait rien si la nouvelle priorité est supérieure
-		à l'ancienne *)
-
-		let decrease_prio (x, p) f =
-				let k = Hashtbl.find f.index x in
-				if f.prio.(k) > p then (
-				    f.prio.(k) <- p;
-				    bubble_up f k
-				);;
-		 
-		(* Augmente la priorité de l'objet x à la valeur p *)       
-		(* Ne fait rien si la nouvelle priorité est inférieure
-		à l'ancienne *)
-
-		let increase_prio (x, p) f =
-				let k = Hashtbl.find f.index x in
-				if f.prio.(k) < p then (
-				    f.prio.(k) <- p;
-				    bubble_down f k
-				);;
-
-		(* Modifie la priorité de l'objet x à la valeur p *)       
-		(* Ne fait rien si la nouvelle priorité est identique
-		à l'ancienne *)
-
-		let modify_prio (x, p) f =
-				let k = Hashtbl.find f.index x in
-				if f.prio.(k) < p then increase_prio (x, p) f
-				else if f.prio.(k) > p then decrease_prio (x, p) f
-				else ();;
-	end
-
-
+    let reorder_down h x =
+      try down_heap h (Hashtbl.find h.indices x)
+      with Not_found -> ()
+end

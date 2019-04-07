@@ -259,11 +259,28 @@ module CustomGraph :
 			(* Variables *)
 			let color_ref = Random.bits () in (* Select a random color *)
 			if (get_col r) = color_ref then failwith "dijkstra: Wrong color";
-			let n = Hashtbl.length g.data in
-			let f = PriorityQueue.create n r in
+			let n = Hashtbl.length g.data in			(* Priority Queue operations *)
+			(* Make the priolist *)
+			let get_prio x = get_dist x in
+			let set_prio x v = set_dist x v in
+			let order x y = (get_prio x) <= (get_prio y) in
+			let f = PriorityQueue.make order in
+			(* Functions *)
+			let pop () =
+				let ret = PriorityQueue.first f in
+				PriorityQueue.remove_first f;
+				ret in
+			let update s k =
+				let cur_prio = get_prio s in
+				set_prio s k;
+				if cur_prio < k then PriorityQueue.reorder_up f s
+				else PriorityQueue.reorder_down f s in
+			let insert s k =
+				set_prio s k;
+				PriorityQueue.add f s in
 			(* Initialisation *)
 			set_dist r 0;
-			PriorityQueue.push (r, 0) f;
+			insert r 0;
 			(* Work on neighbors *)
 			let rec visit_neigh u l = match l with
 				| [] -> ()
@@ -272,14 +289,14 @@ module CustomGraph :
 							((get_dist v) > (get_dist u) + d || (get_dist v) = -1) then (
 						set_father v u;
 						set_dist v ((get_dist u) + d);
-						if not (PriorityQueue.is_in v f) then
-							PriorityQueue.push (v, (get_dist v)) f
+						if not (PriorityQueue.mem f v) then
+							insert v (get_dist v)
 						else
-							PriorityQueue.decrease_prio (v, (get_dist v)) f;
+							update v (get_dist v);
 					);
 					visit_neigh u l' in
 			while not (PriorityQueue.is_empty f) do
-				let (u,_) = PriorityQueue.pop f in
+				let u = pop () in
 				set_col u color_ref;
 				visit_neigh u (nei g u m)
 			done;;
