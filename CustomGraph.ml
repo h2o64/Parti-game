@@ -1,53 +1,63 @@
 module CustomGraph :
   sig
 		type 'a edge
-		type ('a, 'b, 'c) info
-		type ('a, 'b, 'c) graph
-		val tuple_of_edge : 'a edge -> int * 'a
-		val edge_of_tuple : int * int -> int edge
-		val get_dim : ('a, 'b, 'c) graph -> int
-		val get_count : ('a, 'b, 'c) graph -> int
-		val create_graph : int array -> int -> (unit -> 'a) -> int -> (float, int, 'a) graph
-		val draw_graph : (float, 'a, 'b) graph -> unit
-		val adj : ('a, 'b, 'c) graph -> int -> int -> int -> bool
-		val nei : ('a, 'b, 'c) graph -> int -> int -> 'b edge list
-		val nei_n : ('a, 'b, 'c) graph -> int -> int -> int list
-		val get_edg : ('a, 'b, 'c) graph -> int -> int -> int -> 'b list
-		val set_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
-		val add_edg : ('a, 'b, 'c) graph -> int -> int -> 'b -> int -> unit
-		val add_bunch_edg : ('a, 'b, 'c) graph -> int -> 'b edge list -> int -> unit
-		val rmv_edg : ('a, 'b, 'c) graph -> int -> int -> int -> unit
-		val add_pt : (float, 'a, 'b) graph -> float array -> float Rect.rect -> (unit -> 'b) -> unit
-		val get_node : ('a, 'b, 'c) graph -> int -> 'c
-		val get_point : ('a, 'b, 'c) graph -> int -> 'a array
-		val set_node : ('a, 'b, 'c) graph -> int -> 'c -> unit
-		val find_node : (float, 'a, 'b) graph -> float array -> int
-		val find_rect : (float, 'a, 'b) graph -> float array -> float Rect.rect
-		val bfs : ('a, 'b, int array) graph -> int -> int -> unit
-		val dijkstra : ('a, int, int array) graph -> int -> int -> unit
-		val compute_path : ('a, 'b, int array) graph -> int -> int -> int list
-		val shortest_path_bfs : ('a, 'b, int array) graph -> int -> int -> int -> int list * int
-		val shortest_path_dijkstra : ('a, int, int array) graph -> int -> int -> int -> int list * int
+		type ('a, 'b) info
+		type ('a, 'b) graph
+		val get_dim : ('a, 'b) graph -> int
+		val get_count : ('a, 'b) graph -> int
+		val create_edge : int -> 'a -> 'a edge
+		val add_successor : 'a edge -> int -> unit
+		val is_in_successors : 'a edge -> int -> bool
+		val set_edge_maxstate : 'a edge -> int -> unit
+		val set_edge_cost : 'a edge -> 'a -> unit
+		val get_edge_succsatte : 'a edge -> int
+		val get_edge_successors : 'a edge -> int list
+		val get_edge_maxstate : 'a edge -> int
+		val get_edge_cost : 'a edge -> 'a
+		val create_graph : int array -> int -> (unit -> 'a) -> int -> float -> (float, 'a) graph
+		val draw_graph : (float, 'a) graph -> unit
+		val adj : ('a, 'b) graph -> int -> int -> int -> bool
+		val nei : ('a, 'b) graph -> int -> int -> (int * 'a edge) list
+		val nei_n : ('a, 'b) graph -> int -> int -> int list
+		val get_edg : ('a, 'b) graph -> int -> int -> int -> 'a edge list
+		val set_edg : ('a, 'b) graph -> int -> int -> 'a edge -> int -> unit
+		val add_edg : ('a, 'b) graph -> int -> int -> 'a edge -> int -> unit
+		val add_bunch_edg : ('a, 'b) graph -> int -> (int * 'a edge) list -> int -> unit
+		val rmv_edg : ('a, 'b) graph -> int -> int -> int -> unit
+		val add_pt : (float, 'a) graph -> float array -> float Rect.rect -> (unit -> 'a) -> unit
+		val rmv_nd : ('a, 'b) graph -> int -> unit
+		val rmv_point : ('a, 'b) graph -> 'c -> int -> unit
+		val get_node : ('a, 'b) graph -> int -> 'b
+		val get_point : ('a, 'b) graph -> int -> 'a array
+		val set_node : ('a, 'b) graph -> int -> 'b -> unit
+		val find_node : (float, 'a) graph -> float array -> int
+		val find_rect : (float, 'a) graph -> float array -> float Rect.rect
+		val bfs : ('a, int array) graph -> int -> int -> unit
+		val dijkstra : (int, int array) graph -> int -> int -> unit
+		val compute_path : ('a, int array) graph -> int -> int -> int list
+		val shortest_path_bfs : ('a, int array) graph -> int -> int -> int -> int list * int
+		val shortest_path_dijkstra : (int, int array) graph -> int -> int -> int -> int list * int
   end =
   struct
 		(* Structures *)
-		type 'a edge = int * 'a;;
-		type ('a,'b,'c) info = {
+		type 'a edge = {
+			succstate : int;
+			mutable successors : int list;
+			mutable maxstate : int;
+			mutable cost : 'a;
+		}
+		type ('a,'b) info = {
 			point : 'a array;
-			mutable neigh : 'b edge list array;
-			mutable info : 'c;
+			mutable neigh : (int * 'a edge) list array;
+			mutable info : 'b;
 		};;	
-		type ('a,'b,'c) graph = {
+		type ('a,'b) graph = {
 			dim : int;
 			multiplicity : int;
 			mutable count : int;
 			mutable browse : ('a, int) RTree.tree;
-			mutable data : (int, ('a,'b,'c) info) Hashtbl.t;
+			mutable data : (int, ('a,'b) info) Hashtbl.t;
 		};;
-
-		(* Convert edge to tuple *)
-		let tuple_of_edge ((a,b) : 'a edge) = (a,b);;
-		let edge_of_tuple ((a,b) : 'a * 'b) = ((a,b) : 'a edge);;
 
 		(* Get the dimension *)
 		let get_dim graph = graph.dim;;
@@ -55,8 +65,32 @@ module CustomGraph :
 		(* Get graph size *)
 		let get_count graph = graph.count;;
 
+		(* Create an edge *)
+		let create_edge b cost = {
+			succstate = b;
+			successors = [b];
+			maxstate = (-1);
+			cost = cost
+		};;
+
+		(* Add successors to an edge *)
+		let add_successor edg b = edg.successors<-b::edg.successors;;
+
+		(* Look for a successor *)
+		let is_in_successors edg b = List.mem b edg.successors;;
+
+		(* Change some attributes of an edge *)
+		let set_edge_maxstate edg b = edg.maxstate<-b;;
+		let set_edge_cost edg x = edg.cost<-x;;
+
+		(* Get attributes of an edge *)
+		let get_edge_succsatte edg = edg.succstate;;
+		let get_edge_successors edg = edg.successors;;
+		let get_edge_maxstate edg = edg.maxstate;;
+		let get_edge_cost edg = edg.cost;;
+
 		(* Create a graph from points *)
-		let create_graph sizes resolution init_function multiplicity =
+		let create_graph sizes resolution init_function multiplicity infinity_cost =
 			(* Fill ratio for hash table *)
 			let ratio = 4 in
 			(* Create the tree *)
@@ -66,7 +100,8 @@ module CustomGraph :
 			let create_list x = [] in
 			let create_nei i =
 				(let tmp = Array.init multiplicity create_list in
-				tmp.(0)<-(List.map (fun x -> edge_of_tuple (x,1)) (snd arr_neis.(i)));
+				(* Setup successors *)
+				tmp.(0)<-(List.map (fun x -> (x,(create_edge x infinity_cost))) (snd arr_neis.(i)));
 				tmp) in
 			(* Create the empty hashtbl *)
 			let length = Array.length numeral in
@@ -77,6 +112,16 @@ module CustomGraph :
 					info = (init_function ());
 					neigh = (create_nei i);
 				}
+			done;
+			(* Setup predecessors *)
+			let setup_pred i l = match l with
+				| (succ,_)::t ->
+					let cur_value = (Hashtbl.find hashtbl succ) in
+					cur_value.neigh.(1) <- ((i,(create_edge i infinity_cost))::cur_value.neigh.(1));
+					Hashtbl.replace hashtbl succ cur_value;
+				| [] -> () in
+			for i = 0 to (length-1) do
+				setup_pred i (Hashtbl.find hashtbl i).neigh.(0);
 			done;
 			{
 				dim = (Array.length numeral.(0));
@@ -284,11 +329,11 @@ module CustomGraph :
 			(* Work on neighbors *)
 			let rec visit_neigh u l = match l with
 				| [] -> ()
-				| (v, d) :: l' ->
+				| (v, edg) :: l' ->
 					if ((get_col v) <> color_ref) && 
-							((get_dist v) > (get_dist u) + d || (get_dist v) = -1) then (
+							((get_dist v) > (get_dist u) + (get_edge_cost edg) || (get_dist v) = -1) then (
 						set_father v u;
-						set_dist v ((get_dist u) + d);
+						set_dist v ((get_dist u) + (get_edge_cost edg));
 						if not (PriorityQueue.mem f v) then
 							insert v (get_dist v)
 						else
