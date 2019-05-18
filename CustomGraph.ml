@@ -7,14 +7,15 @@ module CustomGraph :
 		val get_count : ('a, 'b) graph -> int
 		val create_edge : int -> 'a -> 'a edge
 		val add_successor : 'a edge -> int -> unit
+		val reset_successors : 'a edge -> unit
 		val is_in_successors : 'a edge -> int -> bool
 		val set_edge_maxstate : 'a edge -> int -> unit
 		val set_edge_cost : 'a edge -> 'a -> unit
-		val get_edge_succsatte : 'a edge -> int
+		val get_edge_succstate : 'a edge -> int
 		val get_edge_successors : 'a edge -> int list
 		val get_edge_maxstate : 'a edge -> int
 		val get_edge_cost : 'a edge -> 'a
-		val create_graph : int array -> int -> (unit -> 'a) -> int -> float -> (float, 'a) graph
+		val create_graph : int array -> int -> (unit -> 'a) -> int -> float -> (float array -> float array -> float) -> (float, 'a) graph
 		val draw_graph : (float, 'a) graph -> unit
 		val adj : ('a, 'b) graph -> int -> int -> int -> bool
 		val nei : ('a, 'b) graph -> int -> int -> (int * 'a edge) list
@@ -32,6 +33,7 @@ module CustomGraph :
 		val set_node : ('a, 'b) graph -> int -> 'b -> unit
 		val find_node : (float, 'a) graph -> float array -> int
 		val find_rect : (float, 'a) graph -> float array -> float Rect.rect
+		val split : (float, 'a) graph -> (unit -> 'a) -> int -> int * int
 		val bfs : ('a, int array) graph -> int -> int -> unit
 		val dijkstra : (int, int array) graph -> int -> int -> unit
 		val compute_path : ('a, int array) graph -> int -> int -> int list
@@ -76,6 +78,9 @@ module CustomGraph :
 		(* Add successors to an edge *)
 		let add_successor edg b = edg.successors<-b::edg.successors;;
 
+		(* Reset successors *)
+		let reset_successors edg = edg.successors<-[];;
+
 		(* Look for a successor *)
 		let is_in_successors edg b = List.mem b edg.successors;;
 
@@ -84,13 +89,13 @@ module CustomGraph :
 		let set_edge_cost edg x = edg.cost<-x;;
 
 		(* Get attributes of an edge *)
-		let get_edge_succsatte edg = edg.succstate;;
+		let get_edge_succstate edg = edg.succstate;;
 		let get_edge_successors edg = edg.successors;;
 		let get_edge_maxstate edg = edg.maxstate;;
 		let get_edge_cost edg = edg.cost;;
 
 		(* Create a graph from points *)
-		let create_graph sizes resolution init_function multiplicity infinity_cost =
+		let create_graph sizes resolution init_function multiplicity infinity_cost cost_function =
 			(* Fill ratio for hash table *)
 			let ratio = 4 in
 			(* Create the tree *)
@@ -101,7 +106,8 @@ module CustomGraph :
 			let create_nei i =
 				(let tmp = Array.init multiplicity create_list in
 				(* Setup successors *)
-				tmp.(0)<-(List.map (fun x -> (x,(create_edge x infinity_cost))) (snd arr_neis.(i)));
+				tmp.(0)<-(List.map (fun x ->
+					(x,(create_edge x (cost_function numeral.(i) numeral.(x))))) (snd arr_neis.(i)));
 				tmp) in
 			(* Create the empty hashtbl *)
 			let length = Array.length numeral in
@@ -114,11 +120,12 @@ module CustomGraph :
 				}
 			done;
 			(* Setup predecessors *)
-			let setup_pred i l = match l with
+			let rec setup_pred i l = match l with
 				| (succ,_)::t ->
 					let cur_value = (Hashtbl.find hashtbl succ) in
 					cur_value.neigh.(1) <- ((i,(create_edge i infinity_cost))::cur_value.neigh.(1));
 					Hashtbl.replace hashtbl succ cur_value;
+					setup_pred i t
 				| [] -> () in
 			for i = 0 to (length-1) do
 				setup_pred i (Hashtbl.find hashtbl i).neigh.(0);
@@ -244,6 +251,35 @@ module CustomGraph :
 			let (rect,_,_) = (RTree.leaf_to_tuple (RTree.find_point x graph.browse)) in
 			rect;;
 
+		(* Split a given node *)
+		let split graph init_function x =
+			(* Get the rectangle *)
+			let x_point = get_point graph x in
+			let x_rtree_node = RTree.find_point x_point graph.browse in
+			(* Insert the new rectangles in the RTree and grab their centers *)
+			let (center1,center2) = RTree.split_node x_rtree_node graph.browse in
+			(* Remove the node from the graph *)
+			rmv_nd graph x;
+			(* Create the new states *)
+			let create_list k = [] in
+			let create_empty_nei () = Array.init graph.multiplicity create_list in
+			let state1 = x in
+			let state2 = graph.count in
+			graph.count <- graph.count + 1;
+			(* Add to the hashtbl with empty neiborhood *)
+			Hashtbl.add graph.data state1 {
+				point = center1;
+				info = (init_function ());
+				neigh = (create_empty_nei ());
+			};
+			Hashtbl.add graph.data state2 {
+				point = center2;
+				info = (init_function ());
+				neigh = (create_empty_nei ());
+			};
+			(* Return the state numbers *)
+			(state1,state2);;
+
 		(* Breadth First Search Algorithm *)
 		let bfs g s m =
 			(* Structure of the header :
@@ -304,7 +340,6 @@ module CustomGraph :
 			(* Variables *)
 			let color_ref = Random.bits () in (* Select a random color *)
 			if (get_col r) = color_ref then failwith "dijkstra: Wrong color";
-			let n = Hashtbl.length g.data in			(* Priority Queue operations *)
 			(* Make the priolist *)
 			let get_prio x = get_dist x in
 			let set_prio x v = set_dist x v in

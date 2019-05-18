@@ -33,7 +33,8 @@ module Rect :
 		val perimeter : float rect -> float
 		val union : 'a rect -> 'a rect -> 'a rect
 		val unionMany : 'a rect list -> 'a rect
-		val split : float rect -> int -> float rect * float rect
+		val split : float rect -> float rect * float rect
+		val are_adjacent: float rect -> float rect -> bool
 		val draw : float rect -> unit
 		val uniform_points : int -> float rect -> float array list
 		val liang_barsky_clipper : float array -> float array -> float rect -> float array * float array
@@ -294,13 +295,33 @@ module Rect :
 				| h::t -> unionMany_aux t (union h cur) in
 			unionMany_aux rects (List.hd rects);;
 
-		(* Split a rectangle in half in a specific axis *)
-		let split rect m =
+		(* Get the longest axis of a rectangle *)
+		let longest_axis rect =
+		 let ret = ref (minus rect.maxCorner.(0) rect.minCorner.(0),0) in
+		 for i = 1 to (rect.dim-1) do
+		 	ret := max !ret (minus rect.maxCorner.(i) rect.minCorner.(i),i);
+		 done;snd !ret;;
+
+		(* Split a rectangle in half on its longest axis *)
+		let split rect =
+			let m = longest_axis rect in
 			let left_rect = copyRect rect in
 			let right_rect = copyRect rect in
 			left_rect.maxCorner.(m) <- div rect.maxCorner.(m) two;
 			right_rect.minCorner.(m) <- div rect.maxCorner.(m) two;
 			(left_rect,right_rect);;
+
+		(* Check if two rectangles are adjacent *)
+		let are_adjacent rect_a rect_b =
+			let ret = ref false in
+			for i = 0 to (rect_a.dim-1) do
+				let sizea = minus rect_a.maxCorner.(i) rect_a.minCorner.(i) in
+				let sizeb = minus rect_b.maxCorner.(i) rect_b.minCorner.(i) in
+				ret := !ret ||
+					(minus (max rect_a.maxCorner.(i) rect_a.maxCorner.(i))
+								(min (minus rect_a.maxCorner.(i) sizea)
+										 (minus rect_b.maxCorner.(i) sizeb))) > (add sizea sizeb)
+			done;not !ret;;
 
 		(* Draw a 2D rectangle *)
 		let draw rect =

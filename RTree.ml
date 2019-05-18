@@ -8,7 +8,7 @@ module RTree :
 		type ('a, 'b) tree_struct
 		type ('a, 'b) tree
 		val empty_tree : int -> ('a, 'b) tree
-		val insert :(float, 'a) tree -> float Rect.rect -> (float, 'a) leaf_data -> unit
+		val insert : (float, 'a) tree -> float Rect.rect -> (float, 'a) leaf_data -> unit
 		val search_point : 'a array -> ('a, 'b) tree -> bool
 		val find_rect : 'a Rect.rect -> ('a, 'b) tree_struct -> ('a, 'b) leaf list
 		val find_segment :float array -> float array -> (float, 'a) tree -> (float, 'a) tree_struct list
@@ -18,7 +18,7 @@ module RTree :
 		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split_node :(float, 'a) tree_struct ->  int -> int -> (float, int) tree -> float array * float array
+		val split_node : (float, 'a) tree_struct -> (float, int) tree -> float array * float array
 	end =
 	struct
 		(* Parameters *)
@@ -653,11 +653,11 @@ module RTree :
 		let tuple_to_leaf_data point data = { pos = point ; data = data };;
 
 		(* Split a node *)
-		let split_node node axis count t =
-			let (rect1,rect2) = Rect.split (assert_leaf_bb node) axis in
+		let split_node node t =
+			let (rect1,rect2) = Rect.split (assert_leaf_bb node) in
 			let (center1,center2) = ((Rect.center rect1),((Rect.center rect2))) in
-			insert t rect1 {pos = (Rect.center rect1) ; data = count + 1};
-			insert t rect2 {pos = (Rect.center rect2) ; data = count + 2};
+			insert t rect1 {pos = (Rect.center rect1) ; data = t.size + 1};
+			insert t rect2 {pos = (Rect.center rect2) ; data = t.size + 2};
 			(center1,center2);;
 
 		(* Benchmarks *)
@@ -707,7 +707,7 @@ module RTree :
 				for j = 0 to (500*i) do
 					let nd = (find_point [|(random_f 700.);(random_f 700.)|] tr) in
 					let start = Unix.gettimeofday () in
-					match (split_node nd (Random.int 2) j tr) with _ -> ();
+					match (split_node nd tr) with _ -> ();
 					let stop = Unix.gettimeofday () in
 					total_time := !total_time +. (stop -. start);
 				done;
