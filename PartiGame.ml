@@ -64,6 +64,11 @@ let stateheuristic graph x y =
 (* Array to tuple *)
 let arr_to_tuple arr = (arr.(0),arr.(1));;
 
+(* Distance between two points *)
+let get_distance_point state1_point state2_point =
+	max (abs_float (state1_point.(0) -. state2_point.(0)))
+			(abs_float (state1_point.(1) -. state2_point.(1)));;
+
 (* Distance between two states *)
 let get_distance graph state1 state2 =
 	let state1_point = CustomGraph.get_point graph.graph state1 in
@@ -429,11 +434,11 @@ let splitState graph state =
 			let n_point = CustomGraph.get_point graph.graph n in
 			let n_rect = CustomGraph.find_rect graph.graph n_point in
 			if Rect.are_adjacent state1_rect n_rect then
-				(addaction graph state1 (get_distance graph state1 n) n;
-				addaction graph n (get_distance graph state1 n) state1);
+				(addaction graph state1 (get_distance_point state1_point n_point) n;
+				addaction graph n (get_distance_point state1_point n_point) state1);
 			if Rect.are_adjacent state2_rect n_rect then
-				(addaction graph state2 (get_distance graph state2 n) n;
-				addaction graph n (get_distance graph state2 n) state2);
+				(addaction graph state2 (get_distance_point state2_point n_point) n;
+				addaction graph n (get_distance_point state2_point n_point) state2);
 			new_edges t
 		| [] -> () in
 	new_edges old_nei;
@@ -544,3 +549,19 @@ let step_execute graph =
 			insertifinconsistent graph graph.goal;
 			(* Redo the computation *)
 			dstarstep graph);!ret);;
+
+(* Setup actions in a graph *)
+let setup_actions graph =
+	let size = CustomGraph.get_count graph.graph in
+	(* Iterate through all the states *)
+	for i = 0 to (size-1) do
+		for j = 0 to (size-1) do
+			let state1_point = CustomGraph.get_point graph.graph i in
+			let state1_rect = CustomGraph.find_rect graph.graph state1_point in
+			let state2_point = CustomGraph.get_point graph.graph j in
+			let state2_rect = CustomGraph.find_rect graph.graph state2_point in
+			if (Rect.are_adjacent state1_rect state2_rect) then
+				addaction graph i (get_distance_point state1_point state2_point) j;
+		done;
+	done;;
+

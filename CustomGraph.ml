@@ -15,7 +15,7 @@ module CustomGraph :
 		val get_edge_successors : 'a edge -> int list
 		val get_edge_maxstate : 'a edge -> int
 		val get_edge_cost : 'a edge -> 'a
-		val create_graph : int array -> int -> (unit -> 'a) -> int -> float -> (float array -> float array -> float) -> (float, 'a) graph
+		val create_graph : int array -> int -> (unit -> 'a) -> int -> 'b -> (float, 'a) graph
 		val draw_graph : (float, 'a) graph -> unit
 		val adj : ('a, 'b) graph -> int -> int -> int -> bool
 		val nei : ('a, 'b) graph -> int -> int -> (int * 'a edge) list
@@ -95,20 +95,14 @@ module CustomGraph :
 		let get_edge_cost edg = edg.cost;;
 
 		(* Create a graph from points *)
-		let create_graph sizes resolution init_function multiplicity infinity_cost cost_function =
+		let create_graph sizes resolution init_function multiplicity infinity_cost =
 			(* Fill ratio for hash table *)
-			let ratio = 4 in
+			let ratio = 8 in
 			(* Create the tree *)
-			let (tree,numeral,neis) = (RTree.grid sizes resolution) in
-			let arr_neis = Array.of_list neis in
+			let (tree,numeral,_) = (RTree.grid sizes resolution) in
 			(* Make independent arrays *)
 			let create_list x = [] in
-			let create_nei i =
-				(let tmp = Array.init multiplicity create_list in
-				(* Setup successors *)
-				tmp.(0)<-(List.map (fun x ->
-					(x,(create_edge x (cost_function numeral.(i) numeral.(x))))) (snd arr_neis.(i)));
-				tmp) in
+			let create_nei i = Array.init multiplicity create_list in
 			(* Create the empty hashtbl *)
 			let length = Array.length numeral in
 			let hashtbl = Hashtbl.create (length*ratio) in
@@ -118,17 +112,6 @@ module CustomGraph :
 					info = (init_function ());
 					neigh = (create_nei i);
 				}
-			done;
-			(* Setup predecessors *)
-			let rec setup_pred i l = match l with
-				| (succ,_)::t ->
-					let cur_value = (Hashtbl.find hashtbl succ) in
-					cur_value.neigh.(1) <- ((i,(create_edge i infinity_cost))::cur_value.neigh.(1));
-					Hashtbl.replace hashtbl succ cur_value;
-					setup_pred i t
-				| [] -> () in
-			for i = 0 to (length-1) do
-				setup_pred i (Hashtbl.find hashtbl i).neigh.(0);
 			done;
 			{
 				dim = (Array.length numeral.(0));
