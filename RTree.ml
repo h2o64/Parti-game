@@ -18,7 +18,7 @@ module RTree :
 		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split_node : (float, 'a) tree_struct -> (float, int) tree -> float array * float array
+		val split_rect : float Rect.rect -> (float, int) tree -> float array * float array
 	end =
 	struct
 		(* Parameters *)
@@ -653,11 +653,11 @@ module RTree :
 		let tuple_to_leaf_data point data = { pos = point ; data = data };;
 
 		(* Split a node *)
-		let split_node node t =
-			let (rect1,rect2) = Rect.split (assert_leaf_bb node) in
+		let split_rect rect t =
+			let (rect1,rect2) = Rect.split rect in
 			let (center1,center2) = ((Rect.center rect1),((Rect.center rect2))) in
-			insert t rect1 {pos = (Rect.center rect1) ; data = t.size + 1};
-			insert t rect2 {pos = (Rect.center rect2) ; data = t.size + 2};
+			insert t rect1 {pos = center1 ; data = t.size + 1};
+			insert t rect2 {pos = center2 ; data = t.size + 2};
 			(center1,center2);;
 
 		(* Benchmarks *)
@@ -697,7 +697,7 @@ module RTree :
 				print_float (stop -. start);
 				Printf.printf "s";
 			done;;
-		let find_bench () =
+		(* let find_bench () =
 			let (tr,_,_) = (grid [|3000;3000|] 50) in
 			for i = 0 to 20 do
 				print_string "\ncount : ";
@@ -705,13 +705,13 @@ module RTree :
 				print_string " | It took ";
 				let total_time = ref 0. in
 				for j = 0 to (500*i) do
-					let nd = (find_point [|(random_f 700.);(random_f 700.)|] tr) in
+					let (rect,_,_) = RTree.leaf_to_tuple (find_point [|(random_f 700.);(random_f 700.)|] tr) in
 					let start = Unix.gettimeofday () in
-					match (split_node nd tr) with _ -> ();
+					match (split_node rect tr) with _ -> ();
 					let stop = Unix.gettimeofday () in
 					total_time := !total_time +. (stop -. start);
 				done;
 				print_float !total_time;
 				Printf.printf "s";
-			done;;
+			done;; *)
 	end

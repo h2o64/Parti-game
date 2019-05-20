@@ -70,7 +70,7 @@ module CustomGraph :
 		(* Create an edge *)
 		let create_edge b cost = {
 			succstate = b;
-			successors = [b];
+			successors = [];
 			maxstate = (-1);
 			cost = cost
 		};;
@@ -195,7 +195,7 @@ module CustomGraph :
 					rmv_edg graph x v i;
 					rmv_edg graph v x i;
 					rmv_nei t i in
-			for i = 0 to graph.multiplicity do
+			for i = 0 to (graph.multiplicity-1) do
 				rmv_nei (nei graph x i) i;
 			done;
 			(* Remove from the hashtbl *)
@@ -210,7 +210,7 @@ module CustomGraph :
 					rmv_edg graph nb v i;
 					rmv_edg graph v nb i;
 					rmv_nei t i in
-			for i = 0 to graph.multiplicity do
+			for i = 0 to (graph.multiplicity-1) do
 				rmv_nei (nei graph nb i) i;
 			done;
 			(* Add to the hashtbl *)
@@ -238,9 +238,9 @@ module CustomGraph :
 		let split graph init_function x =
 			(* Get the rectangle *)
 			let x_point = get_point graph x in
-			let x_rtree_node = RTree.find_point x_point graph.browse in
+			let x_rtree_rect = find_rect graph x_point in
 			(* Insert the new rectangles in the RTree and grab their centers *)
-			let (center1,center2) = RTree.split_node x_rtree_node graph.browse in
+			let (center1,center2) = RTree.split_rect x_rtree_rect graph.browse in
 			(* Remove the node from the graph *)
 			rmv_nd graph x;
 			(* Create the new states *)

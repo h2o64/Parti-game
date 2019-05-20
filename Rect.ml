@@ -307,21 +307,20 @@ module Rect :
 			let m = longest_axis rect in
 			let left_rect = copyRect rect in
 			let right_rect = copyRect rect in
-			left_rect.maxCorner.(m) <- div rect.maxCorner.(m) two;
-			right_rect.minCorner.(m) <- div rect.maxCorner.(m) two;
+			left_rect.maxCorner.(m) <- div (add rect.minCorner.(m) rect.maxCorner.(m)) two;
+			right_rect.minCorner.(m) <- div (add rect.minCorner.(m) rect.maxCorner.(m)) two;
 			(left_rect,right_rect);;
 
 		(* Check if two rectangles are adjacent *)
 		let are_adjacent rect_a rect_b =
-			let ret = ref false in
-			for i = 0 to (rect_a.dim-1) do
-				let sizea = minus rect_a.maxCorner.(i) rect_a.minCorner.(i) in
-				let sizeb = minus rect_b.maxCorner.(i) rect_b.minCorner.(i) in
-				ret := !ret ||
-					(minus (max rect_a.maxCorner.(i) rect_a.maxCorner.(i))
-								(min (minus rect_a.maxCorner.(i) sizea)
-										 (minus rect_b.maxCorner.(i) sizeb))) > (add sizea sizeb)
-			done;not !ret;;
+		let ret = ref None in
+    if ((abs_float (minus rect_a.minCorner.(0) rect_b.maxCorner.(0))) < precision || (abs_float (minus rect_b.minCorner.(0) rect_a.maxCorner.(0))) < precision) then
+        ret := Some(not (rect_a.maxCorner.(1) < rect_b.minCorner.(1) || rect_b.maxCorner.(1) < rect_a.minCorner.(1)));
+    if ((abs_float (minus rect_a.maxCorner.(1) rect_b.minCorner.(1))) < precision || (abs_float (minus rect_b.maxCorner.(1) rect_a.minCorner.(1))) < precision) && (!ret = None) then
+        ret := Some(not (rect_a.maxCorner.(0) < rect_b.minCorner.(0) || rect_b.maxCorner.(0) < rect_a.minCorner.(0)));
+    match !ret with
+    	| None -> false
+    	| Some(a) -> a;;
 
 		(* Draw a 2D rectangle *)
 		let draw rect =
