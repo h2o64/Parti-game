@@ -76,16 +76,23 @@ let print_info graph =
 	for state = 0 to (size-1) do
 		let point = CustomGraph.get_point graph.graph state in
 		let (x,y) = (int_of_float point.(0),int_of_float point.(1)) in
+		(* Set color based on heap *)
+		if PriorityQueue.mem graph.queue state then
+			Graphics.set_color Graphics.red
+		else
+			Graphics.set_color Graphics.blue;
 		(* Draw the state number *)
 		Graphics.moveto (x+x_offset) y;
 		Graphics.draw_string ("state = "^(string_of_int state));
 		(* Draw heuristics *)
-		Graphics.moveto (x+x_offset) (y-y_offset);
+		Graphics.moveto (x+x_offset) (y-1*y_offset);
+		Graphics.draw_string ("h =  "^(string_of_float (get_h graph state)));
+		Graphics.moveto (x+x_offset) (y-2*y_offset);
 		Graphics.draw_string ("g =  "^(string_of_float (get_g graph state)));
-		Graphics.moveto (x+x_offset) (y-y_offset*2);
+		Graphics.moveto (x+x_offset) (y-3*y_offset);
 		Graphics.draw_string ("rhs = "^(string_of_float (get_rhs graph state)));
 		(* Draw nei *)
-		(* print_nei x y (CustomGraph.nei graph.graph state 0) 3; *)
+		(* print_nei x y (CustomGraph.nei graph.graph state 0) 4; *)
 	done;;
 
 (* Heuristic of a state *)
@@ -142,7 +149,7 @@ let insert graph s k =
 	PriorityQueue.add graph.queue s;;
 let insertormodifyheap graph s k =
 	if PriorityQueue.mem graph.queue s then
-		if (get_key graph s) <> k then update graph s k
+		(if (get_key graph s) <> k then update graph s k)
 	else
 		insert graph s k;;
 let remove graph s =
@@ -185,7 +192,7 @@ let check_graph graph =
 			let succ_point = CustomGraph.get_point graph.graph succ in
 			let succ_rect = CustomGraph.find_rect graph.graph succ_point in
 			(* Adjacency test *)
-			if not (Rect.are_adjacent rect succ_rect) then
+			if (not (Rect.are_adjacent rect succ_rect)) && not (succ = state) then
 				failwith "check_graph: a successor is not adjacent";
 			(* Predecessor test *)
 			for_all_successors state rect (CustomGraph.get_edge_successors action)
@@ -203,6 +210,49 @@ let check_graph graph =
 		(* Check successors and predecessors *)
 		check_successors state state_rect (CustomGraph.nei graph.graph state 0);
 	done;;
+
+(* Check currently building path *)
+let check_path graph =
+	let state = ref graph.robotstate in
+	(* Browse actions *)
+	let rec browse_actions min_state min_cost l = match l with
+		| (n,atmp)::t ->
+			let succstate = CustomGraph.get_edge_maxstate atmp in
+			let succstate_point = CustomGraph.get_point graph.graph succstate in
+			let min_state_point = CustomGraph.get_point graph.graph min_state in
+			(* If a smaller state is found *)
+			if (min infinite_cost ((CustomGraph.get_edge_cost atmp)+.(get_g graph succstate)))
+				< (min infinite_cost ((get_g graph min_state)+.min_cost)) then
+				(* That is the new running minimum *)
+				browse_actions succstate (CustomGraph.get_edge_cost atmp) t
+			(* If the state of the cost + g is found *)
+			else if (min infinite_cost ((CustomGraph.get_edge_cost atmp)+.(get_g graph succstate)))
+				= (min infinite_cost ((get_g graph min_state)+.min_cost)) then
+				(if ((infinite_cost*.succstate_point.(0))+.succstate_point.(1))
+						<= ((infinite_cost*.min_state_point.(0))+.min_state_point.(1)) then
+					(* That is the new running minimum *)
+					browse_actions succstate (CustomGraph.get_edge_cost atmp) t
+				else
+					browse_actions min_state min_cost t)
+			else browse_actions min_state min_cost t
+			| [] -> (min_state,min_cost) in
+	if (get_g graph !state) = infinite_cost then ()
+	else
+		(while (!state <> graph.robotgoalstate) do
+			let first_action = snd (List.hd (CustomGraph.nei graph.graph !state 0)) in
+			let first_state = CustomGraph.get_edge_maxstate first_action in
+			let first_cost = infinite_cost in
+			let (min_state,min_cost) = browse_actions first_state first_cost (CustomGraph.nei graph.graph !state 0) in
+			(* Validate next state *)
+			if (min infinite_cost ((get_g graph min_state)+.min_cost))
+				<> (get_g graph !state) then
+				failwith "check_path: Failed on g+c = g";
+			if ((get_g graph min_state) <> (get_rhs graph min_state)) then
+				failwith "check_path: Failed on inconsistent state";
+			print_int min_state;
+			print_string "\n";
+			state := min_state;
+		done);;
 
 (* Reevaluates max equation for a given action *)
 let reevaluatemaxequation graph state action =
@@ -231,7 +281,7 @@ let righthandside graph state =
 		let rec browse_nei l minimum minimum_state = match l with
 			| (n,action)::t ->
 				(* Reevaluate max equation for the selected action if necessary *)
-				if true then reevaluatemaxequation graph state action;
+				reevaluatemaxequation graph state action;
 				let cur = ((CustomGraph.get_edge_cost action) +.
 					 get_g graph (CustomGraph.get_edge_maxstate action)) in
 				if cur < minimum then browse_nei t cur n
@@ -257,19 +307,17 @@ let insertifinconsistent graph state =
 	let new_rhs = righthandside graph state in
 	set_rhs graph state new_rhs;
 	if new_rhs <> (get_g graph state) then
-		insertormodifyheap graph state (calculatekey state graph)
-	else (if PriorityQueue.mem graph.queue state then remove graph state);;
+		insertormodifyheap graph state (calculatekey state graph);;
 let insertifinconsistentgivenrhs graph state rhs_value =
-	if (rhs_value <> (get_rhs graph state)) then
-		insertormodifyheap graph state (calculatekey state graph)
-	else (if PriorityQueue.mem graph.queue state then remove graph state);;
+	if (rhs_value <> (get_g graph state)) then
+		insertormodifyheap graph state (calculatekey state graph);;
 
 (* Initialize everything *)
 let dstarsetup graph =
 	(* Initialize the queue *)
 	insertifinconsistent graph graph.robotgoalstate;
-	let insert_predecessors l = match l with
-		| (pred,_)::t -> insertifinconsistent graph pred
+	let rec insert_predecessors l = match l with
+		| (pred,_)::t -> insertifinconsistent graph pred;insert_predecessors t
 		| [] -> () in
 	insert_predecessors (CustomGraph.nei graph.graph graph.robotgoalstate 1);;
 
@@ -312,11 +360,14 @@ let isRobotStateCut graph =
 
 let dstarstep graph =
 	let robot_state = graph.robotstate in
-	while (not (PriorityQueue.is_empty graph.queue))
-			&& (((topkey graph) < (calculatekey robot_state graph))
-			|| ((get_rhs graph robot_state) > (get_g graph robot_state)))
-			&& not (isRobotStateCut graph) do 
+	while (((topkey graph) < (calculatekey robot_state graph))
+			|| ((get_rhs graph robot_state) <> (get_g graph robot_state)))
+			(* && not (isRobotStateCut graph) *) do
 		let state = (top graph) in
+		(* DEBUG *)
+		print_string "Expand : ";
+		print_int state;
+		print_string "\n";
 		let rhs = get_rhs graph state in
 		(* Iterate over predecessor *)
 		let rec iter1_predecessors l = match l with
@@ -354,7 +405,11 @@ let dstarstep graph =
 			iter2_predecessors g_old (CustomGraph.nei graph.graph state 1);)
 		else
 			failwith "dstarstep: Locally consistent node in the heap";
-	done;;
+	done;
+	(* Various checks *)
+	check_graph graph;
+	(* check_path graph; *)
+	check_heap graph;;
 
 (* Setup the graph *)
 let initializegvalues graph =
@@ -406,7 +461,8 @@ let addLocalPathMinimax graph maze_iter current_state next_state path_queue =
 			failwith "stop";);
 		maze_iter.(0)<-maze_iter.(0) +. !local_dx;
 		maze_iter.(1)<-maze_iter.(1) +. !local_dy;
-	done;Queue.push maze_iter path_queue;;
+	done;
+	Queue.push maze_iter path_queue;;
 
 (* Move the robot *)
 let move_robot graph coord state =
@@ -457,7 +513,7 @@ let getNextState graph next_x next_y next_state source_state =
 					else
 							find_minimum t min_action n_min)
 				else
-					find_minimum l min_action n_min
+					find_minimum t min_action n_min
 			| [] -> (min_action,n_min) in
 		let robot_nei = CustomGraph.nei graph.graph robot_state 0 in
 		let first_action = snd (List.hd robot_nei) in
@@ -524,12 +580,11 @@ let getNextMazeSquare graph next_maze_state pnext_state =
 (* Edit/Add actions *)
 (* NOTE: Can't be moved to CustomGraph because of equation evaluation call *)
 (* Adds a successor state to the list of possible actions for a given action *)
-let addstateaction graph source action state =
+let addstatetoaction graph source action state =
 	(* If it is already there then we are done *)
 	if CustomGraph.is_in_successors action state then ()
 	else
 		(CustomGraph.add_successor action state;
-		CustomGraph.add_edg graph.graph source state action 0;
 		(* Re-evaluate maxstate *)
 		reevaluatemaxequation graph source action);;
 
@@ -543,7 +598,7 @@ let addaction graph state1 cost state2 =
 			if n = state2 then
 				(CustomGraph.set_edge_cost action cost;
 				CustomGraph.reset_successors action;
-				addstateaction graph state1 action state2;)
+				addstatetoaction graph state1 action state2;)
 			else browse_actions t
 		| [] -> found := false in
 	browse_actions (CustomGraph.nei graph.graph state1 0);
@@ -553,7 +608,10 @@ let addaction graph state1 cost state2 =
 	(* Otherwise just create if *)
 	if not !found then
 		(let action = CustomGraph.create_edge state2 cost in
-		addstateaction graph state1 action state2);;
+		addstatetoaction graph state1 action state2;
+		(* Add the action to state1 *)
+		CustomGraph.add_edg graph.graph state1 state2 action 0);;
+
 
 (* Update the key modifier *)
 let updateKeyModifier graph =
@@ -636,7 +694,7 @@ let splitBorderCells graph =
 			else ();
 			split_loosers border t
 		| [] -> () in
-	if isRobotStateCut graph then
+	(* if isRobotStateCut graph then
 		(* If the robot state is cut then it is the only state in the
 			 region of the lost states and we can just split it and its
 			 neighbors split only the robot state and its neighbors *)
@@ -644,7 +702,7 @@ let splitBorderCells graph =
 		split_loosers border (CustomGraph.nei graph.graph graph.robotstate 0);
 		(* If the cell was a bordering one then split it as welll *)
 		if !border then splitState graph graph.robotstate;)
-	else
+	else *)
 		(* Iterate through all the states and split them *)
 		(let size = CustomGraph.get_count graph.graph in
 		for state = 0 to (size-1) do
@@ -678,15 +736,15 @@ let step_execute graph =
 	let next_maze_state = ref (-1) in
 	if graph.robotstate = graph.robotgoalstate then true
 	else
-		(let ret = ref true in
-		let g = get_g graph graph.robotstate in
+		(let g = get_rhs graph graph.robotstate in
 		(* If no path is found then split cells *)
 		if g = infinite_cost then
 			(if not (splitBorderCells graph) then
 				(* Splitting bordering cells was unsuccessful *)
 				(print_string "step_execute: No solution exists.\n";
-				ret := false))
-		else if !ret then
+				false)
+			else true)
+		else
 			((* Get next maze square that the robot has to go into *)
 			let maze_coord = getNextMazeSquare graph next_maze_state next_state in
 			(* Is the next state is not as expected *)
@@ -704,13 +762,14 @@ let step_execute graph =
 			(* If it is empty then move the robot into it and if it is
 				a brand new experience add it to the database *)
 					(* Remember the old expected cost plus g of going along this action *)
-			let (collide,_) = Collision.check_collision graph.scene maze_coord maze_coord in
-			if not collide then
+			let (collide,collision_point) =
+				Collision.check_collision graph.scene [|graph.robot_x;graph.robot_y|] maze_coord in
+			(if not collide then
 				(move_robot graph maze_coord !next_maze_state;
-				if !newExperience then
+				(if !newExperience then
 					(* Add the new experience *)
 					(print_string "step_execute: New experience.\n";
-					addstateaction graph source_state exec_action !next_maze_state;
+					addstatetoaction graph source_state exec_action graph.robotstate;
 					(* Make sure that the key was updated *)
 					updateKeyModifier graph;
 					(* Update vertex for search algorithm *)
@@ -720,21 +779,24 @@ let step_execute graph =
 					(* Check heap validity *)
 					check_heap graph;
 					(* Redo the computation *)
-					dstarstep graph;));)
-		else
-			(* Update the graph and recompute shortest path *)
-			(print_string "step_execute: Next cell is an obstacle";
-			addaction graph graph.robotstate infinite_cost !next_state;
-			(* Make sure that the key was updated *)
-			updateKeyModifier graph;
-			(* Update vertex for search algorithm *)
-			insertifinconsistent graph graph.robotstate;
-			(* Update the heap *)
-			redoheap graph;
-			(* Check heap validity *)
-			check_heap graph;
-			(* Redo the computation *)
-			dstarstep graph);!ret);;
+					dstarstep graph;)))
+			else
+				(* Update the graph and recompute shortest path *)
+				(print_string "step_execute: Next cell is an obstacle.\n";
+				addstatetoaction graph graph.robotstate exec_action graph.robotstate;
+				CustomGraph.set_edge_cost exec_action infinite_cost;
+				reevaluatemaxequation graph graph.robotstate exec_action;
+				(* Make sure that the key was updated *)
+				updateKeyModifier graph;
+				(* Update vertex for search algorithm *)
+				insertifinconsistent graph graph.robotstate;
+				(* Update the heap *)
+				redoheap graph;
+				(* Check heap validity *)
+				check_heap graph;
+				(* Redo the computation *)
+				dstarstep graph););
+			true;););;
 
 (* Setup actions in a graph *)
 let setup_actions graph =
@@ -749,5 +811,6 @@ let setup_actions graph =
 			if (Rect.are_adjacent state1_rect state2_rect) && (i <> j) &&
 				not (CustomGraph.adj graph.graph i j 0) then
 				addaction graph i (get_distance_point state1_point state2_point) j;
+			if (i = j) then addaction graph i infinite_cost j;
 		done;
 	done;;
