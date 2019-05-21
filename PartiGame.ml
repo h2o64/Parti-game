@@ -184,6 +184,9 @@ let check_graph graph =
 		| [] -> failwith "check_graph: not the right predecessor" in
 	let rec for_all_successors state rect l = match l with
 		| succ::t ->
+			(* print_string "Checking ";
+			print_int succ;
+			print_string " predecessors.\n"; *)
 			check_predecessors state rect (CustomGraph.nei graph.graph succ 1);
 			for_all_successors state rect t
 		| [] -> () in 
@@ -307,10 +310,12 @@ let insertifinconsistent graph state =
 	let new_rhs = righthandside graph state in
 	set_rhs graph state new_rhs;
 	if new_rhs <> (get_g graph state) then
-		insertormodifyheap graph state (calculatekey state graph);;
+		insertormodifyheap graph state (calculatekey state graph)
+	else (if PriorityQueue.mem graph.queue state then remove graph state);;
 let insertifinconsistentgivenrhs graph state rhs_value =
 	if (rhs_value <> (get_g graph state)) then
-		insertormodifyheap graph state (calculatekey state graph);;
+		insertormodifyheap graph state (calculatekey state graph)
+	else (if PriorityQueue.mem graph.queue state then remove graph state);;
 
 (* Initialize everything *)
 let dstarsetup graph =
@@ -363,7 +368,7 @@ let dstarstep graph =
 	while (((topkey graph) < (calculatekey robot_state graph))
 			|| ((get_rhs graph robot_state) <> (get_g graph robot_state)))
 			(* && not (isRobotStateCut graph) *) do
-		let state = (top graph) in
+		let state = (pop graph) in
 		(* DEBUG *)
 		print_string "Expand : ";
 		print_int state;
@@ -390,9 +395,7 @@ let dstarstep graph =
 			| [] -> () in
 		(* Over consistent *)
 		if rhs < (get_g graph state) then
-			((* Delete the state to be expanded *)
-			PriorityQueue.remove_first graph.queue;
-			(* Update rhs *)
+			((* Update rhs *)
 			set_g graph state rhs;
 			(* Insert consistantly *)
 			iter1_predecessors (CustomGraph.nei graph.graph state 1);)
@@ -437,13 +440,13 @@ let addLocalPathMinimax graph maze_iter current_state next_state path_queue =
 	let next_coord = CustomGraph.get_point graph.graph next_state in
 	let current_coord = CustomGraph.get_point graph.graph current_state in
 	let current_rect = CustomGraph.find_rect graph.graph current_coord in
+	let local_dx = ref 0. in
+	let local_dy = ref 0. in
 	(* Iterate until we exit the current state *)
 	while Rect.contains current_rect maze_iter do
 		(* Choose the square that minimizes the maxiumum difference *)
 		let x_diff = next_coord.(0) -. maze_iter.(0) in
 		let y_diff = next_coord.(1) -. maze_iter.(1) in
-		let local_dx = ref 0. in
-		let local_dy = ref 0. in
 		if not (is_0 x_diff) && not (is_0 y_diff) then
 			(* Move diagonally *)
 			(local_dx := if (is_pos x_diff) then 1. else (-1.);
@@ -454,11 +457,7 @@ let addLocalPathMinimax graph maze_iter current_state next_state path_queue =
 		else if not (is_0 y_diff) then
 			(* Move along Y *)
 			local_dy := if (is_pos y_diff) then 1. else (-1.)
-		else
-			(print_float x_diff;
-			print_string "\n";
-			print_float y_diff;
-			failwith "stop";);
+		else failwith "stop";
 		maze_iter.(0)<-maze_iter.(0) +. !local_dx;
 		maze_iter.(1)<-maze_iter.(1) +. !local_dy;
 	done;
@@ -520,6 +519,10 @@ let getNextState graph next_x next_y next_state source_state =
 		let (min_action,n_min) = find_minimum robot_nei first_action infinite_cost in
 		let min_action_point = CustomGraph.get_point graph.graph
 						(CustomGraph.get_edge_succstate min_action) in
+		(* DEBUG *)
+		print_string "min_action_sucessor : ";
+		print_int (CustomGraph.get_edge_succstate min_action);
+		print_string "\n";
 		next_x := min_action_point.(0);
 		next_y := min_action_point.(1);
 		next_state := CustomGraph.get_edge_succstate min_action;
@@ -623,7 +626,9 @@ let updateKeyModifier graph =
 	keymodifier :=
 		!keymodifier +. (stateheuristic graph !lastKmUpdate_x !lastKmUpdate_y);
 	lastKmUpdate_x := robot_state_point.(0);
-	lastKmUpdate_y := robot_state_point.(1);;
+	lastKmUpdate_y := robot_state_point.(1);
+	(* We use a heap *)
+	keymodifier := 0.;;
 
 (* Reset the key modifier *)
 let resetKeyModifier graph =
@@ -634,6 +639,9 @@ let resetKeyModifier graph =
 
 (* Split a given state *)
 let splitState graph state =
+	print_string "splitState: State ";
+	print_int state;
+	print_string " is split.\n";
 	(* Check the graph's validity *)
 	check_graph graph;
 	(* Old actions *)
@@ -769,7 +777,7 @@ let step_execute graph =
 				(if !newExperience then
 					(* Add the new experience *)
 					(print_string "step_execute: New experience.\n";
-					addstatetoaction graph source_state exec_action graph.robotstate;
+					addstatetoaction graph source_state exec_action !next_maze_state;
 					(* Make sure that the key was updated *)
 					updateKeyModifier graph;
 					(* Update vertex for search algorithm *)
@@ -783,7 +791,7 @@ let step_execute graph =
 			else
 				(* Update the graph and recompute shortest path *)
 				(print_string "step_execute: Next cell is an obstacle.\n";
-				addstatetoaction graph graph.robotstate exec_action graph.robotstate;
+				(* addstatetoaction graph graph.robotstate exec_action graph.robotstate; *)
 				CustomGraph.set_edge_cost exec_action infinite_cost;
 				reevaluatemaxequation graph graph.robotstate exec_action;
 				(* Make sure that the key was updated *)

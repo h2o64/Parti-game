@@ -18,7 +18,7 @@ module RTree :
 		val apply_tree : ('a -> unit) -> ('b, 'a) tree -> unit
 		val leaf_to_tuple : ('a, 'b) tree_struct -> 'a Rect.rect * 'a array * 'b
 		val tuple_to_leaf_data : 'a array -> 'b -> ('a, 'b) leaf_data
-		val split_rect : float Rect.rect -> (float, int) tree -> float array * float array
+		val split_rect : float Rect.rect -> (float, 'a) tree -> 'a -> 'a -> float array * float array
 	end =
 	struct
 		(* Parameters *)
@@ -653,11 +653,11 @@ module RTree :
 		let tuple_to_leaf_data point data = { pos = point ; data = data };;
 
 		(* Split a node *)
-		let split_rect rect t =
+		let split_rect rect t data1 data2 =
 			let (rect1,rect2) = Rect.split rect in
 			let (center1,center2) = ((Rect.center rect1),((Rect.center rect2))) in
-			insert t rect1 {pos = center1 ; data = t.size + 1};
-			insert t rect2 {pos = center2 ; data = t.size + 2};
+			insert t rect1 {pos = center1 ; data = data1};
+			insert t rect2 {pos = center2 ; data = data2};
 			(center1,center2);;
 
 		(* Benchmarks *)

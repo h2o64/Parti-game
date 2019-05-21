@@ -316,11 +316,19 @@ module Rect :
 		let ret = ref None in
     if ((abs_float (minus rect_a.minCorner.(0) rect_b.maxCorner.(0))) < precision || (abs_float (minus rect_b.minCorner.(0) rect_a.maxCorner.(0))) < precision) then
         ret := Some(not (rect_a.maxCorner.(1) < rect_b.minCorner.(1) || rect_b.maxCorner.(1) < rect_a.minCorner.(1)));
-    if ((abs_float (minus rect_a.maxCorner.(1) rect_b.minCorner.(1))) < precision || (abs_float (minus rect_b.maxCorner.(1) rect_a.minCorner.(1))) < precision) && (!ret = None) then
-        ret := Some(not (rect_a.maxCorner.(0) < rect_b.minCorner.(0) || rect_b.maxCorner.(0) < rect_a.minCorner.(0)));
+    if (!ret = None) && ((abs_float (minus rect_a.maxCorner.(1) rect_b.minCorner.(1))) < precision || (abs_float (minus rect_b.maxCorner.(1) rect_a.minCorner.(1))) < precision) then
+        ret := Some(not (rect_a.maxCorner.(0) < rect_b.minCorner.(0) || rect_b.maxCorner.(0) < rect_a.minCorner.(0))); 
     match !ret with
     	| None -> false
-    	| Some(a) -> a;;
+    	| Some(a) ->
+    		(* Remove diagonal contact *)
+    		if a then
+    			(if is_0 (minus rect_a.minCorner.(0) rect_b.maxCorner.(0)) then
+    				not (is_0 (minus rect_a.minCorner.(1) rect_b.maxCorner.(1))) && not (is_0 (minus rect_a.maxCorner.(1) rect_b.minCorner.(1)))
+    			else if is_0 (minus rect_a.maxCorner.(0) rect_b.minCorner.(0)) then
+    			  not (is_0 (minus rect_a.maxCorner.(1) rect_b.minCorner.(1))) && not (is_0 (minus rect_a.minCorner.(1) rect_b.maxCorner.(1)))
+    			else true;)
+    		else false;;
 
 		(* Draw a 2D rectangle *)
 		let draw rect =

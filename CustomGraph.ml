@@ -239,15 +239,16 @@ module CustomGraph :
 			(* Get the rectangle *)
 			let x_point = get_point graph x in
 			let x_rtree_rect = find_rect graph x_point in
+			let state1 = x in
+			let state2 = graph.count in
 			(* Insert the new rectangles in the RTree and grab their centers *)
-			let (center1,center2) = RTree.split_rect x_rtree_rect graph.browse in
+			let (center1,center2) =
+				RTree.split_rect x_rtree_rect graph.browse state1 state2 in
 			(* Remove the node from the graph *)
 			rmv_nd graph x;
 			(* Create the new states *)
 			let create_list k = [] in
 			let create_empty_nei () = Array.init graph.multiplicity create_list in
-			let state1 = x in
-			let state2 = graph.count in
 			graph.count <- graph.count + 1;
 			(* Add to the hashtbl with empty neiborhood *)
 			Hashtbl.add graph.data state1 {
