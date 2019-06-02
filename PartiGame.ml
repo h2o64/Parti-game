@@ -1,11 +1,13 @@
 (* Global flags *)
 let h_eps = 1.;;
-let disable_heuristic = false;;
 let keymodifier = ref 0.;;
 let lastKmUpdate_x = ref (-1.);;
 let lastKmUpdate_y = ref (-1.);;
 let infinite_cost = 100000000.;;
 let stateChange = ref false;;
+
+(* Feature flags *)
+let disable_heuristic = false;;
 
 (* Special graph structure for Parti-Game *)
 type pg_graph = {
@@ -98,10 +100,10 @@ let print_info graph =
 (* Heuristic of a state *)
 let stateheuristic graph x y =
 	let robot_state_point = CustomGraph.get_point graph.graph graph.robotstate in
-	let h_eps = 1. in
 	let ret = ref 0. in
-	if (x >= 0.) && (y >= 0.) && (robot_state_point.(0) >= 0.) && (robot_state_point.(1) >= 0.) && (not disable_heuristic) then
-		ret := h_eps *. (abs_float(x -. robot_state_point.(0)) +. abs_float(y -. robot_state_point.(1)));
+	if (not disable_heuristic) then
+		ret :=  (abs_float (x -. robot_state_point.(0))) +.
+						(abs_float (y -. robot_state_point.(1)));
 	!ret;;
 
 (* Array to tuple *)
@@ -109,14 +111,14 @@ let arr_to_tuple arr = (arr.(0),arr.(1));;
 
 (* Distance between two points *)
 let get_distance_point state1_point state2_point =
-	max (abs_float (state1_point.(0) -. state2_point.(0)))
+	(abs_float (state1_point.(0) -. state2_point.(0))) +.
 			(abs_float (state1_point.(1) -. state2_point.(1)));;
 
 (* Distance between two states *)
 let get_distance graph state1 state2 =
 	let state1_point = CustomGraph.get_point graph.graph state1 in
 	let state2_point = CustomGraph.get_point graph.graph state2 in
-	max (abs_float (state1_point.(0) -. state2_point.(0)))
+	(abs_float (state1_point.(0) -. state2_point.(0))) +.
 			(abs_float (state1_point.(1) -. state2_point.(1)));;
 
 (* Calculate key of a state *)
@@ -163,11 +165,23 @@ let check_heap graph =
 		if PriorityQueue.mem graph.queue state then
 			let (key0,key1) = get_key graph state in
 			let state_point = CustomGraph.get_point graph.graph state in
-			if ((min infinite_cost ((min (get_rhs graph state) (get_g graph state)) +.
-				(stateheuristic graph state_point.(0) state_point.(1)))) <> key0)
-				&& ((min (get_rhs graph state) (get_g graph state)) <> key1) then
-				failwith "check_heap: Check heap failed";
+			if ((min infinite_cost
+							 ((min (get_rhs graph state) (get_g graph state)) +. (stateheuristic graph state_point.(0) state_point.(1)))) <> key0)
+				|| ((min (get_rhs graph state) (get_g graph state)) <> key1) then
+				(let (new_key0,new_key1) = calculatekey state graph in
+				print_string "old_key : ";
+				print_float key0;
+				print_string " ";
+				print_float key1;
+				print_string "\n";
+				print_string "new_key : ";
+				print_float new_key0;
+				print_string " ";
+				print_float new_key1;
+				print_string "\n";
+				failwith "check_heap: Check heap failed");
 	done;;
+
 (* Check graph validity *)
 let check_graph graph =
 	let size = CustomGraph.get_count graph.graph in
@@ -369,45 +383,29 @@ let dstarstep graph =
 			|| ((get_rhs graph robot_state) <> (get_g graph robot_state)))
 			(* && not (isRobotStateCut graph) *) do
 		let state = (pop graph) in
-		(* DEBUG *)
-		print_string "Expand : ";
-		print_int state;
-		print_string "\n";
 		let rhs = get_rhs graph state in
 		(* Iterate over predecessor *)
-		let rec iter1_predecessors l = match l with
+		let rec insert_predecessors l = match l with
 			| (pred,_)::t ->
-				if (get_rhs graph pred) >=
-					min infinite_cost ((get_g graph state) +. (get_distance graph pred state)) then
-					insertifinconsistent graph pred
-				else
-					insertifinconsistentgivenrhs graph pred (get_rhs graph pred);
-				iter1_predecessors t
-			| [] -> () in
-		let rec iter2_predecessors g_old l = match l with
-			| (pred,_)::t ->
-				if (get_rhs graph pred) >=
-					min infinite_cost (g_old +. (get_distance graph pred state)) then
-					insertifinconsistent graph pred
-				else
-					insertifinconsistentgivenrhs graph pred (get_rhs graph pred);
-				iter2_predecessors g_old t
+				insertifinconsistent graph pred;
+				insert_predecessors t
 			| [] -> () in
 		(* Over consistent *)
 		if rhs < (get_g graph state) then
-			((* Update rhs *)
+			((* Update g-value *)
 			set_g graph state rhs;
-			(* Insert consistantly *)
-			iter1_predecessors (CustomGraph.nei graph.graph state 1);)
+			(* Insert the predecessors if inconsistant *)
+			insert_predecessors (CustomGraph.nei graph.graph state 1);)
 		(* Under consistent *)
 		else if rhs > (get_g graph state) then
-			(let g_old = get_g graph state in
+			((* Update g-value *)
 			set_g graph state infinite_cost;
+			(* Insert the state *)
 			insertifinconsistent graph state;
-			(* Insert consistantly *)
-			iter2_predecessors g_old (CustomGraph.nei graph.graph state 1);)
+			(* Insert the predecessors if inconsistant *)
+			insert_predecessors (CustomGraph.nei graph.graph state 1);)
 		else
-			failwith "dstarstep: Locally consistent node in the heap";
+			(print_int state; failwith "dstarstep: Locally consistent node in the heap");
 	done;
 	(* Various checks *)
 	check_graph graph;
@@ -465,9 +463,19 @@ let addLocalPathMinimax graph maze_iter current_state next_state path_queue =
 
 (* Move the robot *)
 let move_robot graph coord state =
-	print_string "Robot moved !\n";
+	print_string "Robot moved from (";
+	print_float graph.robot_x;
+	print_string ",";
+	print_float graph.robot_y;
+	print_string ") to (";
+	print_float coord.(0);
+	print_string ",";
+	print_float coord.(1);
+	print_string ").\n";
+	Graphics.set_color Graphics.red;
 	Graphics.lineto (int_of_float coord.(0)) (int_of_float coord.(1));
-	stateChange := true;
+	Graphics.set_color Graphics.blue;
+	if state <> graph.robotstate then stateChange := true;
 	graph.robot_x<-coord.(0);
 	graph.robot_y<-coord.(1);
 	graph.robotstate<-state;;
@@ -520,9 +528,6 @@ let getNextState graph next_x next_y next_state source_state =
 		let min_action_point = CustomGraph.get_point graph.graph
 						(CustomGraph.get_edge_succstate min_action) in
 		(* DEBUG *)
-		print_string "min_action_sucessor : ";
-		print_int (CustomGraph.get_edge_succstate min_action);
-		print_string "\n";
 		next_x := min_action_point.(0);
 		next_y := min_action_point.(1);
 		next_state := CustomGraph.get_edge_succstate min_action;
@@ -783,7 +788,7 @@ let step_execute graph =
 					(* Update vertex for search algorithm *)
 					insertifinconsistent graph source_state;
 					(* Update the heap *)
-					redoheap graph;
+					if not disable_heuristic then redoheap graph;
 					(* Check heap validity *)
 					check_heap graph;
 					(* Redo the computation *)
@@ -799,7 +804,7 @@ let step_execute graph =
 				(* Update vertex for search algorithm *)
 				insertifinconsistent graph graph.robotstate;
 				(* Update the heap *)
-				redoheap graph;
+				if not disable_heuristic then redoheap graph;
 				(* Check heap validity *)
 				check_heap graph;
 				(* Redo the computation *)
@@ -821,4 +826,62 @@ let setup_actions graph =
 				addaction graph i (get_distance_point state1_point state2_point) j;
 			if (i = j) then addaction graph i infinite_cost j;
 		done;
+	done;;
+
+(* Create a parti-game setup to play with your friends *)
+(* Make a graph structure from an image *)
+let graph_from_image image_path sizes resolution =
+	(* Header initialisation *)
+	let header_init () = Array.make 16 0. in
+	(* Graph from figure 1 *)
+	let graph = CustomGraph.create_graph sizes resolution header_init 2 infinity in
+	(* Scene from figure 1 *)
+	let scene = Collision.image_to_scene image_path 40 in
+	(* Set a point *)
+	let set_point () =
+		while not (Graphics.button_down ()) do () done;
+		let (x,y) = Graphics.mouse_pos () in
+		let state = CustomGraph.find_node graph [|float_of_int x;float_of_int y|] in
+		(float_of_int x),(float_of_int y),(state) in
+	(* Display everything and ask for choices *)
+	CustomGraph.draw_graph graph;
+	Collision.draw_scene scene;
+	print_string "Clic on the start point.\n";
+	let (startx,starty,startstate) = set_point () in
+	Unix.sleep 1;
+	print_string "Clic on the goal point.\n";
+	let (goalx,goaly,goalstate) = set_point () in
+	(* Convert to Parti-Game graph type *)
+	{
+		graph = graph;
+		scene = scene;
+		robotgoalstate = goalstate;
+		robot_goal_x = goalx;
+		robot_goal_y = goaly;
+		robotstate = startstate;
+		robot_x = startx;
+		robot_y = starty;
+		queue = PriorityQueue.make (order graph);
+	};;
+(* Display the graph and scene of a pg_graph *)
+let display_initial_grid graph =
+	CustomGraph.draw_graph graph.graph;
+	Collision.draw_scene graph.scene;;
+(* Split states on a clic - DO IT INITIALY NOT DURING RUN *)
+let split_of_clic graph =
+	(* Header initialisation *)
+	let header_init () = Array.make 16 0. in
+	while not (Graphics.button_down ()) do () done;
+	let (x,y) = Graphics.mouse_pos () in
+	let state = CustomGraph.find_node graph.graph [|float_of_int x;float_of_int y|] in
+	match CustomGraph.split graph.graph header_init state with _ -> ();
+	CustomGraph.draw_graph graph.graph;;
+(* Run the Parti-Game algorithm *)
+let run_partigame graph iterations =
+	(* Setup everything *)
+	setup_actions graph;
+	partigame_setup graph;
+	for i = 0 to iterations do
+		if not (step_execute graph) then
+			failwith "NO PATH"
 	done;;
